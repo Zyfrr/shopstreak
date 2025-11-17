@@ -18,6 +18,7 @@ import { useCart } from "@/components/contexts/cart-context";
 import { useAuth } from "@/components/contexts/auth-context";
 import { useToast } from "@/components/providers/toast-provider";
 
+//whishlight
 interface WishlistItem {
   id: string;
   name: string;
