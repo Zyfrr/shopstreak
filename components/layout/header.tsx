@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   HiShoppingCart,
@@ -50,6 +50,7 @@ export function Header() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { items } = useCart();
   const {
@@ -176,6 +177,25 @@ export function Header() {
     return `/product?category=${encodeURIComponent(categoryValue)}`;
   };
 
+  // IMPROVED: Active state checking function
+  const isNavItemActive = (href: string, label: string) => {
+    // For home page
+    if (href === "/" && pathname === "/") return true;
+    
+    // For products page without category
+    if (href === "/product" && pathname === "/product" && !searchParams.get('category')) return true;
+    
+    // For category pages - check if current category matches
+    if (href.startsWith("/product?category=")) {
+      const currentCategory = searchParams.get('category');
+      const hrefCategory = new URLSearchParams(href.split('?')[1]).get('category');
+      return currentCategory === hrefCategory;
+    }
+    
+    // For exact matches
+    return pathname === href;
+  };
+
   // Updated desktop navigation using the helper function
   const desktopNavItems = [
     { label: "Home", href: "/" },
@@ -184,6 +204,7 @@ export function Header() {
     { label: "Home & Living", href: createCategoryUrl("Home & Living") },
     { label: "Accessories", href: createCategoryUrl("Accessories") },
   ];
+
   // Theme options
   const themeOptions = [
     {
@@ -420,7 +441,7 @@ export function Header() {
                 href={item.href}
                 onClick={handleNavItemClick}
                 className={`text-sm font-medium transition-colors hover:text-primary ${
-                  pathname === item.href
+                  isNavItemActive(item.href, item.label)
                     ? "text-primary font-semibold"
                     : "text-foreground/80"
                 }`}

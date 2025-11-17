@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import SS_Product from '@/models/SS_Product';
+import SS_Category from '@/models/SS_Category'; // Import the Category model
 
 export async function GET(request) {
   try {
@@ -10,7 +11,7 @@ export async function GET(request) {
     
     // Extract query parameters
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '25');
     const searchQuery = searchParams.get('q') || '';
     const category = searchParams.get('category') || '';
     const subCategory = searchParams.get('subCategory') || '';
@@ -20,7 +21,7 @@ export async function GET(request) {
     const inStock = searchParams.get('inStock');
     const sort = searchParams.get('sort') || 'popular';
 
-    console.log('🔍 API Received Category:', category); // Debug log
+    console.log('🔍 API Received Category:', category);
 
     // Build filter object
     let filter = {
@@ -33,27 +34,27 @@ export async function GET(request) {
       filter['SS_CUSTOMER_VISIBLE.SS_AVERAGE_RATING'] = { $gte: minRating };
     }
 
-    // ENHANCED CATEGORY FILTER - Handle URL decoded categories
+    // ENHANCED CATEGORY FILTER - Handle both ObjectId and category name
     if (category && category !== 'all') {
-      // Decode URL parameters and handle different formats
       const decodedCategory = decodeURIComponent(category);
-      console.log('🔍 Decoded Category:', decodedCategory); // Debug log
+      console.log('🔍 Decoded Category:', decodedCategory);
       
-      // Create a more flexible category filter
-      const categorySearchTerms = [
-        decodedCategory,
-        decodedCategory.replace(/&/g, 'and'),
-        decodedCategory.replace(/\s+/g, '\\s*'),
-        decodedCategory.toLowerCase(),
-        decodedCategory.toUpperCase()
-      ];
-
-      // Remove duplicates
-      const uniqueTerms = [...new Set(categorySearchTerms)];
+      // Check if it's a valid ObjectId (24 character hex string)
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(decodedCategory);
       
-      filter['SS_ADMIN_VISIBLE.SS_CATEGORY.SS_CATEGORY_NAME'] = {
-        $in: uniqueTerms.map(term => new RegExp(term, 'i'))
-      };
+      if (isObjectId) {
+        // Filter by category ObjectId
+        filter['SS_ADMIN_VISIBLE.SS_CATEGORY'] = decodedCategory;
+      } else {
+        // Filter by category name using aggregation lookup
+        // We'll handle this differently since we can't populate in the initial query
+        const categories = await SS_Category.find({
+          SS_CATEGORY_NAME: { $regex: decodedCategory, $options: 'i' }
+        }).select('_id');
+        
+        const categoryIds = categories.map(cat => cat._id);
+        filter['SS_ADMIN_VISIBLE.SS_CATEGORY'] = { $in: categoryIds };
+      }
     }
 
     // Sub-category filter
@@ -104,23 +105,41 @@ export async function GET(request) {
         sortOptions = { 'SS_CUSTOMER_VISIBLE.SS_SOLD_COUNT': -1 };
     }
 
-    console.log('🔍 Final Filter:', JSON.stringify(filter, null, 2)); // Debug log
+    console.log('🔍 Final Filter:', JSON.stringify(filter, null, 2));
 
     // Execute query with pagination
     const skip = (page - 1) * limit;
     
-    const products = await SS_Product.find(filter)
-      .populate('SS_ADMIN_VISIBLE.SS_CATEGORY')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Use aggregation to properly handle category population
+    const aggregationPipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'ss_categories', // MongoDB collection name (usually lowercase plural)
+          localField: 'SS_ADMIN_VISIBLE.SS_CATEGORY',
+          foreignField: '_id',
+          as: 'categoryData'
+        }
+      },
+      {
+        $addFields: {
+          'SS_ADMIN_VISIBLE.SS_CATEGORY': {
+            $arrayElemAt: ['$categoryData', 0]
+          }
+        }
+      },
+      { $sort: sortOptions },
+      { $skip: skip },
+      { $limit: limit }
+    ];
+
+    const products = await SS_Product.aggregate(aggregationPipeline);
 
     // Get total count for pagination
     const total = await SS_Product.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
-    console.log('🔍 Products Found:', products.length); // Debug log
+    console.log('🔍 Products Found:', products.length);
 
     // Transform products for frontend
     const transformedProducts = products.map(product => {
@@ -144,12 +163,16 @@ export async function GET(request) {
         images.push(...product.SS_CUSTOMER_VISIBLE.SS_GALLERY_IMAGES.filter((img) => img && img !== mainImage));
       }
 
+      // Handle category data from aggregation
+      const categoryData = product.SS_ADMIN_VISIBLE?.SS_CATEGORY;
+      const categoryName = categoryData?.SS_CATEGORY_NAME || 'Uncategorized';
+
       return {
         id: product._id.toString(),
         name: product.SS_CUSTOMER_VISIBLE?.SS_PRODUCT_TITLE || product.SS_ADMIN_VISIBLE.SS_PRODUCT_NAME,
         description: product.SS_ADMIN_VISIBLE.SS_PRODUCT_DESCRIPTION,
         shortDescription: product.SS_CUSTOMER_VISIBLE?.SS_SHORT_DESCRIPTION,
-        category: product.SS_ADMIN_VISIBLE.SS_CATEGORY?.SS_CATEGORY_NAME || 'Uncategorized',
+        category: categoryName,
         subCategory: product.SS_ADMIN_VISIBLE.SS_SUBCATEGORY,
         brand: product.SS_ADMIN_VISIBLE.SS_BRAND,
         price: product.SS_ADMIN_VISIBLE.SS_SELLING_PRICE,

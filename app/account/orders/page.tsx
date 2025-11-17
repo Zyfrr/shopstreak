@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Package,
   Truck,
@@ -41,6 +42,7 @@ interface Order {
 }
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -49,10 +51,12 @@ export default function OrdersPage() {
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchOrders();
+    if (!isAuthenticated) {
+      router.push("/auth/login?redirect=/account/orders");
+      return;
     }
-  }, [isAuthenticated]);
+    fetchOrders();
+  }, [isAuthenticated, router]);
 
   const fetchOrders = async () => {
     try {
@@ -107,28 +111,22 @@ export default function OrdersPage() {
   };
 
   const getStatusIcon = (status: string) => {
-  switch (status.toLowerCase()) {
-    case "delivered":
-      return <Package className="w-5 h-5 text-green-600" />;
-
-    case "shipped":
-      return <Truck className="w-5 h-5 text-blue-600" />;
-
-    case "processing":
-    case "confirmed":
-      return <Clock className="w-5 h-5 text-yellow-600 animate-spin" />;
-
-    case "pending":
-      return <Calendar className="w-5 h-5 text-orange-600" />;
-
-    case "cancelled":
-      return <X className="w-5 h-5 text-red-600" />;
-
-    default:
-      return <Package className="w-5 h-5 text-gray-500" />;
-  }
-};
-
+    switch (status.toLowerCase()) {
+      case "delivered":
+        return <Package className="w-5 h-5 text-green-600" />;
+      case "shipped":
+        return <Truck className="w-5 h-5 text-blue-600" />;
+      case "processing":
+      case "confirmed":
+        return <Clock className="w-5 h-5 text-yellow-600 animate-spin" />;
+      case "pending":
+        return <Calendar className="w-5 h-5 text-orange-600" />;
+      case "cancelled":
+        return <X className="w-5 h-5 text-red-600" />;
+      default:
+        return <Package className="w-5 h-5 text-gray-500" />;
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -148,7 +146,8 @@ export default function OrdersPage() {
     });
   };
 
-  if (loading) {
+  // Show loading state while checking authentication
+  if (!isAuthenticated || loading) {
     return (
       <AccountLayout
         title="My Orders"
@@ -223,7 +222,7 @@ export default function OrdersPage() {
           <p className="text-xs text-muted-foreground">In Transit</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-4 text-center">
-          < IndianRupee className="w-6 h-6 text-purple-500 mx-auto mb-2" />
+          <IndianRupee className="w-6 h-6 text-purple-500 mx-auto mb-2" />
           <p className="text-xl font-bold">
             ₹{orders.reduce((sum, order) => sum + order.total, 0).toLocaleString('en-IN')}
           </p>
