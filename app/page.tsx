@@ -2,7 +2,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { ShoppingBag, PackageSearch ,AppWindow ,SearchCheck} from "lucide-react";
+import {
+  ShoppingBag,
+  PackageSearch,
+  AppWindow,
+  SearchCheck,
+} from "lucide-react";
 
 interface Product {
   id: string;
@@ -32,6 +37,23 @@ export default function HomePage() {
     fetchData();
   }, []);
 
+  // Category mapping system
+  const categoryMapping = {
+    Electronics: "Electronics",
+    "Home & Living": "Home & Living",
+    Fitness: "Fitness & Sports",
+    Accessories: "Accessories",
+    Kitchen: "Kitchen & Dining",
+    Beauty: "Beauty & Personal Care",
+  };
+
+  // Helper function to create category URLs
+  const createCategoryUrl = (categoryKey: string) => {
+    const categoryValue =
+      categoryMapping[categoryKey as keyof typeof categoryMapping];
+    return `/product?category=${encodeURIComponent(categoryValue)}`;
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -46,38 +68,48 @@ export default function HomePage() {
         setTrendingProducts(productsData.data);
       }
 
-      // Set categories
+      // Home Page Category List (matching Header category URLs)
       const categoryData: Category[] = [
-        { id: "all", name: "All Products", icon: "🛍️", href: "/product" },
+        {
+          id: "all",
+          name: "All Products",
+          icon: "🛍️",
+          href: "/product",
+        },
+
         {
           id: "Electronics",
           name: "Electronics",
           icon: "📱",
-          href: "/product?category=Electronics",
+          href: createCategoryUrl("Electronics"),
         },
+
         {
-          id: "Skincare & Beauty",
-          name: "Beauty",
+          id: "Beauty",
+          name: "Beauty & Personal Care",
           icon: "💄",
-          href: "/product?category=Skincare & Beauty",
+          href: createCategoryUrl("Beauty"),
         },
+
         {
-          id: "Fashion",
-          name: "Fashion",
-          icon: "👕",
-          href: "/product?category=Fashion",
+          id: "Accessories",
+          name: "Accessories",
+          icon: "👜",
+          href: createCategoryUrl("Accessories"),
         },
+
         {
           id: "Home & Living",
-          name: "Home",
+          name: "Home & Living",
           icon: "🏠",
-          href: "/product?category=Home & Living",
+          href: createCategoryUrl("Home & Living"),
         },
+
         {
-          id: "Sports",
-          name: "Sports",
+          id: "Fitness",
+          name: "Fitness & Sports",
           icon: "⚽",
-          href: "/product?category=Sports",
+          href: createCategoryUrl("Fitness"),
         },
       ];
 
@@ -91,29 +123,24 @@ export default function HomePage() {
 
   return (
     <div className="bg-background min-h-screen">
-     <section className="w-full py-14 px-4 bg-gradient-to-b from-accent/10 via-background to-background">
+      <section className="w-full py-14 px-4 bg-gradient-to-b from-accent/10 via-background to-background">
+        <div className="max-w-4xl mx-auto text-center">
+          {/* Heading */}
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
+            Welcome to <span className="text-accent">ShopStreak!</span>
+          </h1>
 
+          {/* Subheading */}
+          <p className="text-sm sm:text-base md:text-lg text-muted-foreground mt-3 mb-8 max-w-xl mx-auto">
+            Discover amazing products with fast delivery and great prices.
+          </p>
 
-
-  <div className="max-w-4xl mx-auto text-center">
-
-    {/* Heading */}
-    <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
-      Welcome to <span className="text-accent">ShopStreak!</span>
-    </h1>
-
-    {/* Subheading */}
-    <p className="text-sm sm:text-base md:text-lg text-muted-foreground mt-3 mb-8 max-w-xl mx-auto">
-      Discover amazing products with fast delivery and great prices.
-    </p>
-
-    {/* Buttons Row */}
-    <div className="flex flex-row justify-center items-center gap-4 mt-4">
-
-      {/* Primary Button */}
-      <Link
-        href="/product"
-        className="
+          {/* Buttons Row */}
+          <div className="flex flex-row justify-center items-center gap-4 mt-4">
+            {/* Primary Button */}
+            <Link
+              href="/product"
+              className="
           px-5 py-3 
           sm:px-6 sm:py-3 
           rounded-xl font-semibold 
@@ -122,15 +149,16 @@ export default function HomePage() {
           bg-accent text-accent-foreground
           shadow-md hover:shadow-lg hover:scale-105 transition-all
         "
-      >
-        <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />  {/* Bigger icon on desktop */}
-        Start Shopping
-      </Link>
+            >
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />{" "}
+              {/* Bigger icon on desktop */}
+              Start Shopping
+            </Link>
 
-      {/* Secondary Button */}
-      <Link
-        href="/product"
-        className="
+            {/* Secondary Button */}
+            <Link
+              href="/product"
+              className="
           px-5 py-3 
           sm:px-6 sm:py-3 
           rounded-xl font-semibold 
@@ -140,15 +168,14 @@ export default function HomePage() {
           text-foreground bg-card
           shadow-sm hover:bg-accent/10 hover:scale-105 transition-all
         "
-      >
-        <PackageSearch className="w-4 h-4 sm:w-5 sm:h-5" />  {/* Bigger icon on desktop */}
-        View Products
-      </Link>
-
-    </div>
-  </div>
-</section>
-
+            >
+              <PackageSearch className="w-4 h-4 sm:w-5 sm:h-5" />{" "}
+              {/* Bigger icon on desktop */}
+              View Products
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Categories */}
       <section className="py-12 px-4">

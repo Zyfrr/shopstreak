@@ -35,7 +35,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Fetch cart from database
   const fetchCart = async () => {
     if (!isAuthenticated) {
       setItems([]);
@@ -68,7 +67,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     fetchCart();
   }, [isAuthenticated, user]);
 
-  // Add item to cart with database integration
   const addItem = async (item: Omit<CartItem, "quantity">, quantity: number = 1) => {
     if (!isAuthenticated) {
       throw new Error("Please login to add items to cart");
@@ -94,7 +92,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         throw new Error(result.message);
       }
 
-      // Refresh cart after adding item
       await fetchCart();
     } catch (error) {
       console.error("Error adding item to cart:", error);
@@ -102,7 +99,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Update quantity with database integration
   const updateQuantity = async (productId: string, quantity: number) => {
     if (!isAuthenticated) return;
 
@@ -133,7 +129,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Remove item with database integration
   const removeItem = async (productId: string) => {
     if (!isAuthenticated) return;
 
@@ -159,7 +154,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Clear cart with database integration
   const clearCart = async () => {
     if (!isAuthenticated) return;
 

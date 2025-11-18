@@ -2,9 +2,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle, Smartphone, Laptop } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { Logo } from "@/components/shared/logo";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,6 +29,26 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Check device type for responsive design
+  useEffect(() => {
+    const checkDevice = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkDevice();
+    window.addEventListener('resize', checkDevice);
+    return () => window.removeEventListener('resize', checkDevice);
+  }, []);
+
+  // Handle redirect from signup
+  useEffect(() => {
+    const fromSignup = searchParams.get('fromSignup');
+    if (fromSignup === 'true') {
+      toast.success('Account created successfully! Please sign in.');
+    }
+  }, [searchParams]);
 
   // Handle Google OAuth callback from URL parameters
   useEffect(() => {
@@ -36,10 +57,7 @@ export default function LoginPage() {
       const googleSuccess = urlParams.get('google_success');
       const accessToken = urlParams.get('access_token');
       const refreshToken = urlParams.get('refresh_token');
-      const onboardingStatus = urlParams.get('onboarding_status');
       const error = urlParams.get('error');
-
-      console.log('🔍 Checking Google OAuth callback...');
 
       if (error) {
         const errorMessage = urlParams.get('message') || error;
@@ -51,13 +69,11 @@ export default function LoginPage() {
       if (googleSuccess === 'true' && accessToken && refreshToken) {
         setGoogleLoading(true);
         try {
-          console.log('🔄 Processing Google OAuth callback...');
-          
           // Store tokens immediately
           localStorage.setItem("accessToken", accessToken);
           localStorage.setItem("refreshToken", refreshToken);
 
-          // Fetch user profile to get complete data
+          // Fetch user profile
           const userResponse = await fetch('/api/users/profile', {
             headers: {
               'Authorization': `Bearer ${accessToken}`
@@ -70,19 +86,14 @@ export default function LoginPage() {
             
             if (userData) {
               localStorage.setItem('userData', JSON.stringify(userData));
-              console.log('✅ User data stored:', userData);
 
               // Determine if profile setup is needed
               const needsProfileSetup = userData.onboardingStatus === 'profile_setup';
 
-              console.log('🔄 Navigation decision:', { needsProfileSetup });
-
               // Use window.location for guaranteed navigation
               if (needsProfileSetup) {
-                console.log('🚀 Redirecting to profile setup...');
                 window.location.href = '/auth/profile-setup';
               } else {
-                console.log('🚀 Redirecting to home...');
                 window.location.href = '/';
               }
             } else {
@@ -115,6 +126,8 @@ export default function LoginPage() {
     
     if (!password) {
       newErrors.password = "Password is required";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
     }
     
     setErrors(newErrors);
@@ -138,7 +151,6 @@ export default function LoginPage() {
       });
 
       const result = await response.json();
-      console.log('Login response:', result);
 
       if (result.success) {
         const { user: userData, tokens, customerProfile: profile } = result.data;
@@ -156,8 +168,6 @@ export default function LoginPage() {
         
         // Get user data to check onboarding status
         const needsProfileSetup = userData.onboardingStatus === 'profile_setup';
-
-        console.log('🔄 Regular login - navigation decision:', { needsProfileSetup });
 
         // Use window.location for guaranteed navigation
         if (needsProfileSetup) {
@@ -186,31 +196,32 @@ export default function LoginPage() {
 
   // Simple Google login using redirect
   const handleGoogleLogin = () => {
-    console.log('🚀 Starting Google OAuth redirect...');
     setGoogleLoading(true);
     window.location.href = '/api/auth/google';
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-md shadow-xl border-0">
-        <CardHeader className="text-center space-y-4 pb-8">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-accent/5">
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-card/95 backdrop-blur-sm">
+        <CardHeader className="text-center space-y-4 pb-4 px-6 pt-8">
           <div className="flex justify-center">
-            <Logo size="lg" />
+            <Logo size={isMobile ? "md" : "lg"} showText={!isMobile} />
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-            <CardDescription>
-              Sign in to your ShopStreak account to continue shopping
+            <CardTitle className={`font-bold text-foreground ${isMobile ? 'text-xl' : 'text-2xl'}`}>
+              Welcome Back
+            </CardTitle>
+            <CardDescription className={isMobile ? 'text-sm' : ''}>
+              Sign in to your ShopStreak account
             </CardDescription>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 px-6 pb-8">
           {/* Error Alert */}
           {errors.general && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-destructive">
                   {errors.general}
@@ -219,13 +230,37 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Google Login Button */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGoogleLogin}
+            disabled={googleLoading || authLoading || isLoading}
+            className="w-full border-2 border-border bg-background hover:bg-accent/10 h-12 text-sm font-medium rounded-lg flex justify-center items-center gap-3 transition-all disabled:opacity-50"
+          >
+            {googleLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FcGoogle className="w-5 h-5" />
+            )}
+            Continue with Google
+          </Button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-sm text-muted-foreground px-2">OR</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
           {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-4">
-              <div>
+              {/* Email Field */}
+              <div className="space-y-2">
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-foreground mb-2"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Email Address
                 </label>
@@ -238,7 +273,7 @@ export default function LoginPage() {
                     setEmail(e.target.value);
                     if (errors.email || errors.general) setErrors({});
                   }}
-                  className={`w-full ${errors.email || errors.general ? 'border-destructive' : ''}`}
+                  className={`w-full h-12 ${errors.email || errors.general ? 'border-destructive' : 'border-border'}`}
                   disabled={isLoading || googleLoading}
                 />
                 {errors.email && errors.email.trim() && (
@@ -248,10 +283,11 @@ export default function LoginPage() {
                 )}
               </div>
 
-              <div>
+              {/* Password Field */}
+              <div className="space-y-2">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-foreground mb-2"
+                  className="block text-sm font-medium text-foreground"
                 >
                   Password
                 </label>
@@ -265,13 +301,13 @@ export default function LoginPage() {
                       setPassword(e.target.value);
                       if (errors.password || errors.general) setErrors({});
                     }}
-                    className={`w-full pr-10 ${errors.password || errors.general ? 'border-destructive' : ''}`}
+                    className={`w-full h-12 pr-10 ${errors.password || errors.general ? 'border-destructive' : 'border-border'}`}
                     disabled={isLoading || googleLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition p-1"
                     disabled={isLoading || googleLoading}
                   >
                     {showPassword ? (
@@ -289,6 +325,7 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* Forgot Password Link */}
             <div className="text-right">
               <Link
                 href="/auth/forgot-password"
@@ -298,10 +335,11 @@ export default function LoginPage() {
               </Link>
             </div>
 
+            {/* Login Button */}
             <Button
               type="submit"
               disabled={isLoading || authLoading || googleLoading}
-              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-primary text-primary-foreground h-12 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
             >
               {isLoading ? (
                 <>
@@ -317,36 +355,13 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-sm text-muted-foreground">OR</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          {/* Google Login Button */}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleGoogleLogin}
-            disabled={googleLoading || authLoading || isLoading}
-            className="w-full border-2 border-gray-300 bg-white hover:bg-gray-50 h-11 text-sm font-medium rounded-lg flex justify-center items-center gap-3 transition-all disabled:opacity-50"
-          >
-            {googleLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FcGoogle className="w-5 h-5" />
-            )}
-            Continue with Google
-          </Button>
-
           {/* Sign Up Link */}
-          <div className="text-center">
+          <div className="text-center pt-2">
             <p className="text-sm text-muted-foreground">
               Don't have an account?{" "}
               <Link
                 href="/auth/signup"
-                className="text-primary font-semibold hover:underline"
+                className="text-primary font-semibold hover:underline transition-colors"
               >
                 Sign up
               </Link>
