@@ -615,14 +615,15 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+<button
+  onClick={handleAddReview}
+  className="px-6 mt-2 py-3 bg-primary text-primary-foreground rounded-lg font-semibold 
+  hover:opacity-90 transition flex items-center gap-2 ml-auto"
+>
+  <MessageSquare className="w-4 h-4" />
+  Write a Review
+</button>
 
-        <button
-          onClick={handleAddReview}
-          className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition flex items-center gap-2"
-        >
-          <MessageSquare className="w-4 h-4" />
-          Write a Review
-        </button>
       </div>
 
       {/* Reviews List */}
@@ -734,7 +735,7 @@ export default function ProductPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Product Main Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-8 lg:mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-4 lg:mb-4">
           {/* Images with Carousel */}
           <div className="lg:sticky lg:top-24 lg:self-start">
             <ImageCarousel images={product.images} productName={product.name} />
@@ -911,7 +912,7 @@ flex items-center justify-center gap-2 text-sm lg:text-base shadow-lg hover:shad
             </div>
 
             {/* Trust Badges - Mobile Optimized */}
-            <div className="grid grid-cols-2 gap-3 lg:gap-4 p-3 lg:p-4 bg-card border border-border rounded-xl text-center text-xs lg:text-sm">
+            <div className="mt-8 grid grid-cols-2 gap-3 lg:gap-4 p-3 lg:p-4 bg-card border border-border rounded-xl text-center text-xs lg:text-sm">
               <div className="flex flex-col items-center">
                 <Truck className="w-5 h-5 lg:w-6 lg:h-6 text-primary mb-1" />
                 <div className="text-muted-foreground">Free Delivery</div>
