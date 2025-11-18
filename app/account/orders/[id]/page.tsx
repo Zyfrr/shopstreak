@@ -123,22 +123,22 @@ export default function OrderDetailsPage() {
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "delivered":
-        return "bg-green-100 text-green-800 border-green-200";
-      case "shipped":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "processing":
-      case "confirmed":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "pending":
-        return "bg-orange-100 text-orange-800 border-orange-200";
-      case "cancelled":
-        return "bg-red-100 text-red-800 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
+  switch (status) {
+    case "confirmed":
+      return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    case "processing":
+      return "bg-blue-100 text-blue-800 border-blue-300";
+    case "shipped":
+      return "bg-purple-100 text-purple-800 border-purple-300";
+    case "delivered":
+      return "bg-green-100 text-green-800 border-green-300";
+    case "cancelled":
+      return "bg-red-100 text-red-800 border-red-300";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-300";
+  }
+};
+
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -155,6 +155,24 @@ export default function OrderDetailsPage() {
         return <HiClock className="w-4 h-4" />;
     }
   };
+
+  const getStatusIconBoxColor = (status: string) => {
+  switch (status) {
+    case "confirmed":
+      return "bg-yellow-100 text-yellow-800 border border-yellow-300";
+    case "processing":
+      return "bg-blue-100 text-blue-800 border border-blue-300";
+    case "shipped":
+      return "bg-purple-100 text-purple-800 border border-purple-300";
+    case "delivered":
+      return "bg-green-100 text-green-800 border border-green-300";
+    case "cancelled":
+      return "bg-red-100 text-red-800 border border-red-300";
+    default:
+      return "bg-gray-100 text-gray-800 border border-gray-300";
+  }
+};
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -244,46 +262,57 @@ export default function OrderDetailsPage() {
           Track Order
         </Link>
       </div>
+{/* Order Header */}
+<div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
+  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
 
-      {/* Order Header */}
-      <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex-1">
-            <h1 className="text-xl sm:text-2xl font-bold mb-2">
-              Order #{order.orderNumber}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm border ${getStatusColor(
-                  order.status
-                )}`}
-              >
-                {getStatusIcon(order.status)}
-                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-              </span>
-              <span
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm border ${
-                  order.paymentStatus === "paid"
-                    ? "bg-green-100 text-green-800 border-green-200"
-                    : "bg-yellow-100 text-yellow-800 border-yellow-200"
-                }`}
-              >
-                {order.paymentStatus === "paid"
-                  ? "Payment Completed"
-                  : "Payment Pending"}
-              </span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-primary">
-              ₹{order.summary.total.toFixed(2)}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {order.items.length} item{order.items.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
+    {/* Left Section */}
+    <div className="flex-1">
+      <h1 className="text-xl sm:text-2xl font-bold mb-2">
+        Order #{order.orderNumber}
+      </h1>
+
+      {/* Status Badges */}
+      <div className="flex flex-wrap items-center gap-3">
+
+        {/* Order Status */}
+        <span
+          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm border ${getStatusColor(order.status)}`}
+        >
+          {getStatusIcon(order.status)}
+          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+        </span>
+
+        {/* Payment Status */}
+        <span
+          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm border ${
+            order.paymentStatus === "paid"
+              ? "bg-green-100 text-green-800 border-green-300"
+              : "bg-yellow-100 text-yellow-800 border-yellow-300"
+          }`}
+        >
+          {order.paymentStatus === "paid"
+            ? "Payment Completed"
+            : "Payment Pending"}
+        </span>
       </div>
+    </div>
+
+   {/* Right Section */}
+<div className="flex flex-col justify-between items-end text-right gap-1">
+  <p className="text-base font-medium text-muted-foreground">
+    Total ({order.items.length}) item{order.items.length !== 1 ? "s" : ""}
+  </p>
+
+  <p className="text-2xl sm:text-3xl font-bold text-primary">
+    ₹{order.summary.total.toFixed(2)}
+  </p>
+</div>
+
+
+  </div>
+</div>
+
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Order Items */}

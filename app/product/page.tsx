@@ -305,71 +305,79 @@ export default function ProductsPage() {
     setProducts(filteredProducts);
   }, [filteredProducts]);
 
-  // Wishlist toggle function
-  const handleWishlistToggle = async (product: Product) => {
-    if (!isAuthenticated) {
-      router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);
-      return;
-    }
+const handleWishlistToggle = async (product: Product) => {
+  if (!isAuthenticated) {
+    router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);
+    return;
+  }
 
-    setWishlistLoading(product.id);
-    try {
-      const token = localStorage.getItem("accessToken");
+  setWishlistLoading(product.id);
+  try {
+    const token = localStorage.getItem("accessToken");
 
-      if (wishlistItems.includes(product.id)) {
-        // Remove from wishlist
-        const response = await fetch(`/api/wishlist?productId=${product.id}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          setWishlistItems((prev) => prev.filter((id) => id !== product.id));
-          addToast({
-            type: "success",
-            title: "Removed from wishlist",
-            message: `${product.name} has been removed from your wishlist`,
-            duration: 3000,
-          });
-        }
-      } else {
-        // Add to wishlist
-        const response = await fetch("/api/wishlist", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ productId: product.id }),
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          setWishlistItems((prev) => [...prev, product.id]);
-          addToast({
-            type: "success",
-            title: "Added to wishlist",
-            message: `${product.name} has been added to your wishlist`,
-            duration: 3000,
-          });
-        }
-      }
-    } catch (error: any) {
-      console.error("Error updating wishlist:", error);
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to update wishlist",
-        duration: 5000,
+    if (wishlistItems.includes(product.id)) {
+      // Remove from wishlist
+      const response = await fetch(`/api/wishlist?productId=${product.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-    } finally {
-      setWishlistLoading(null);
-    }
-  };
 
+      const result = await response.json();
+      if (result.success) {
+        const newWishlist = wishlistItems.filter((id) => id !== product.id);
+        setWishlistItems(newWishlist);
+        // Update header wishlist count immediately
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
+        }
+        addToast({
+          type: "success",
+          title: "Removed from wishlist",
+          message: `${product.name} has been removed from your wishlist`,
+          duration: 3000,
+        });
+      }
+    } else {
+      // Add to wishlist
+      const response = await fetch("/api/wishlist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ productId: product.id }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        const newWishlist = [...wishlistItems, product.id];
+        setWishlistItems(newWishlist);
+        // Update header wishlist count immediately
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
+        }
+        addToast({
+          type: "success",
+          title: "Added to wishlist",
+          message: `${product.name} has been added to your wishlist`,
+          duration: 3000,
+        });
+      }
+    }
+  } catch (error: any) {
+    console.error("Error updating wishlist:", error);
+    addToast({
+      type: "error",
+      title: "Error",
+      message: "Failed to update wishlist",
+      duration: 5000,
+    });
+  } finally {
+    setWishlistLoading(null);
+  }
+};
   const handleAddToCart = async (product: Product) => {
     if (!isAuthenticated) {
       router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);

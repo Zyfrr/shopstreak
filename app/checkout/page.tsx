@@ -1,4 +1,3 @@
-// app/checkout/page.tsx
 "use client";
 
 import type React from "react";
@@ -48,6 +47,7 @@ interface PaymentMethod {
   icon: string;
   color: string;
   description: string;
+  imageUrl?: string;
 }
 
 interface PincodePostOffice {
@@ -77,6 +77,7 @@ export default function CheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("upi");
   const [upiId, setUpiId] = useState("");
+  const [selectedUpiApp, setSelectedUpiApp] = useState<string | null>(null);
 
   // Fetch addresses from API
   const fetchAddresses = async () => {
@@ -110,14 +111,14 @@ export default function CheckoutPage() {
         type: "error",
         title: "Error",
         message: "Failed to load addresses",
-        duration: 5000,
+        duration: 3000,
       });
     } finally {
       setAddressesLoading(false);
     }
   };
 
-  // Add new address - FIXED
+  // Add new address
   const addAddress = async (addressData: any): Promise<boolean> => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -153,7 +154,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // Update address - FIXED
+  // Update address
   const updateAddress = async (
     addressId: string,
     updates: any
@@ -222,9 +223,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // In your checkout page, replace these functions:
-
-  // Set default address - FIXED
+  // Set default address
   const setDefaultAddress = async (addressId: string): Promise<boolean> => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -252,7 +251,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // Set current address - FIXED
+  // Set current address
   const setCurrentAddress = async (addressId: string): Promise<boolean> => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -280,7 +279,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // Also update the handleAddressSelect function to handle errors better:
+  // Handle address selection
   const handleAddressSelect = async (address: Address) => {
     setSelectedAddress(address);
     // Set as current address when selected
@@ -291,7 +290,7 @@ export default function CheckoutPage() {
           type: "success",
           title: "Address Updated",
           message: "Delivery address has been set as current",
-          duration: 3000,
+          duration: 2000,
         });
       } else {
         throw new Error("Failed to set current address");
@@ -302,10 +301,11 @@ export default function CheckoutPage() {
         type: "error",
         title: "Error",
         message: "Failed to set current address",
-        duration: 5000,
+        duration: 3000,
       });
     }
   };
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
@@ -315,38 +315,7 @@ export default function CheckoutPage() {
     fetchAddresses();
   }, [isAuthenticated, router]);
 
-  // Calculate totals
-  const subtotal = total;
-  const tax = subtotal * 0.18;
-  const shipping = subtotal > 1000 ? 0 : 99;
-  const finalTotal = subtotal + tax + shipping;
-
-  // Payment methods - Only UPI options
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: "gpay",
-      name: "Google Pay",
-      icon: "GPay",
-      color: "bg-[#4285F4]",
-      description: "Fast and secure UPI payments",
-    },
-    {
-      id: "phonepe",
-      name: "PhonePe",
-      icon: "PhonePe",
-      color: "bg-[#5F259F]",
-      description: "Popular UPI payment app",
-    },
-    {
-      id: "paytm",
-      name: "Paytm",
-      icon: "Paytm",
-      color: "bg-[#002970]",
-      description: "India's leading payments app",
-    },
-  ];
-
-  // Replace the handlePayment function in your existing checkout page with this:
+  // Load checkout items from session storage
   useEffect(() => {
     const stored = sessionStorage.getItem("checkoutItems");
     if (!stored) {
@@ -354,24 +323,84 @@ export default function CheckoutPage() {
       return;
     }
     setCheckoutItems(JSON.parse(stored));
-  }, []);
+  }, [router]);
+
+  // Calculate totals
+  const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const tax = subtotal * 0.18;
+  const shipping = subtotal > 1000 ? 0 : 99;
+  const finalTotal = subtotal + tax + shipping;
+
+  // Payment methods - UPI options with image URLs
+  const paymentMethods: PaymentMethod[] = [
+    {
+      id: "gpay",
+      name: "Google Pay",
+      icon: "GPay",
+      color: "bg-[#4285F4]",
+      description: "Fast and secure UPI payments",
+      imageUrl: "/gpay.png" // Add your image path
+    },
+    {
+      id: "phonepe",
+      name: "PhonePe",
+      icon: "PhonePe",
+      color: "bg-[#5F259F]",
+      description: "Popular UPI payment app",
+      imageUrl: "/phonepay.png"
+    },
+    {
+      id: "paytm",
+      name: "Paytm",
+      icon: "Paytm",
+      color: "bg-[#002970]",
+      description: "India's leading payments app",
+      imageUrl: "/paytm.png"
+    },
+  ];
+
+  // Card payment methods
+  const cardPaymentMethods: PaymentMethod[] = [
+    {
+      id: "card",
+      name: "Credit/Debit Card",
+      icon: "💳",
+      color: "bg-[#6366F1]",
+      description: "Pay with your card",
+    },
+    {
+      id: "netbanking",
+      name: "Net Banking",
+      icon: "🏦",
+      color: "bg-[#059669]",
+      description: "Internet banking",
+    },
+    {
+      id: "cod",
+      name: "Cash on Delivery",
+      icon: "💰",
+      color: "bg-[#DC2626]",
+      description: "Pay when you receive",
+    }
+  ];
+
   const handlePayment = async () => {
     if (!selectedAddress) {
       addToast({
         type: "error",
         title: "Address Required",
         message: "Please select a delivery address",
-        duration: 5000,
+        duration: 3000,
       });
       return;
     }
 
-    if (paymentMethod === "upi" && !upiId) {
+    if (paymentMethod === "upi" && !upiId && !selectedUpiApp) {
       addToast({
         type: "error",
-        title: "UPI ID Required",
-        message: "Please enter your UPI ID",
-        duration: 5000,
+        title: "UPI Required",
+        message: "Please select a UPI app or enter UPI ID",
+        duration: 3000,
       });
       return;
     }
@@ -388,15 +417,6 @@ export default function CheckoutPage() {
         throw new Error("No items selected for checkout");
       }
 
-      // Calculate totals
-      const subtotal = selectedCartItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-      const tax = subtotal * 0.18;
-      const shipping = subtotal > 1000 ? 0 : 99;
-      const finalTotal = subtotal + tax + shipping;
-
       console.log("Creating order with items:", selectedCartItems);
 
       // Create order
@@ -409,8 +429,9 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           items: selectedCartItems,
           shippingAddress: selectedAddress,
-          paymentMethod: paymentMethod, // This will be mapped in the API
+          paymentMethod: paymentMethod,
           upiId: upiId,
+          upiApp: selectedUpiApp,
           totalAmount: finalTotal,
           taxAmount: tax,
           shippingCharge: shipping,
@@ -441,6 +462,7 @@ export default function CheckoutPage() {
             orderId: orderResult.data.order.id,
             paymentMethod: paymentMethod,
             upiId: upiId,
+            upiApp: selectedUpiApp,
             amount: finalTotal,
           }),
         });
@@ -459,7 +481,7 @@ export default function CheckoutPage() {
         type: "success",
         title: "Order Placed Successfully!",
         message: `Your order #${orderResult.data.order.orderNumber} has been confirmed`,
-        duration: 5000,
+        duration: 4000,
       });
 
       // Clear session storage
@@ -474,7 +496,7 @@ export default function CheckoutPage() {
         type: "error",
         title: "Payment Failed",
         message: error.message || "Please try again or contact support",
-        duration: 5000,
+        duration: 4000,
       });
     } finally {
       setIsProcessing(false);
@@ -491,7 +513,7 @@ export default function CheckoutPage() {
           type: "success",
           title: "Address Deleted",
           message: "Address has been deleted successfully",
-          duration: 3000,
+          duration: 2000,
         });
       } else {
         throw new Error("Failed to delete address");
@@ -501,7 +523,7 @@ export default function CheckoutPage() {
         type: "error",
         title: "Error",
         message: "Failed to delete address",
-        duration: 5000,
+        duration: 3000,
       });
     }
   };
@@ -514,7 +536,7 @@ export default function CheckoutPage() {
           type: "success",
           title: "Default Address Set",
           message: "Default address has been updated",
-          duration: 3000,
+          duration: 2000,
         });
       }
     } catch (error) {
@@ -522,7 +544,7 @@ export default function CheckoutPage() {
         type: "error",
         title: "Error",
         message: "Failed to set default address",
-        duration: 5000,
+        duration: 3000,
       });
     }
   };
@@ -535,6 +557,11 @@ export default function CheckoutPage() {
   const handleCloseAddressForm = () => {
     setShowAddressForm(false);
     setEditingAddress(null);
+  };
+
+  const handleUpiAppSelect = (appId: string) => {
+    setSelectedUpiApp(appId);
+    setUpiId(""); // Clear UPI ID when app is selected
   };
 
   if (!isAuthenticated) {
@@ -565,7 +592,7 @@ export default function CheckoutPage() {
           {[1, 2].map((s) => (
             <div key={s} className="flex items-center">
               <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center font-bold border-2 transition ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition ${
                   s <= step
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted text-muted-foreground border-border"
@@ -575,7 +602,7 @@ export default function CheckoutPage() {
               </div>
               {s < 2 && (
                 <div
-                  className={`w-16 h-1 ${
+                  className={`w-12 h-1 ${
                     s < step ? "bg-primary" : "bg-border"
                   }`}
                 />
@@ -584,20 +611,19 @@ export default function CheckoutPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Form */}
           <div className="lg:col-span-2 space-y-6">
             {step === 1 && (
-              <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+              <div className="bg-card border border-border rounded-xl p-4 md:p-6 space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Delivery Address</h2>
+                  <h2 className="text-xl md:text-2xl font-bold">Delivery Address</h2>
                   <button
                     onClick={() => setShowAddressForm(true)}
-                    className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition text-sm md:px-4 md:py-2 md:text-base"
+                    className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition text-sm"
                   >
                     <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Add New Address</span>
-                    <span className="sm:hidden">Add Address</span>
+                    <span>Add Address</span>
                   </button>
                 </div>
 
@@ -621,7 +647,7 @@ export default function CheckoutPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                     {addresses.map((address) => (
                       <AddressCard
                         key={address._id}
@@ -642,7 +668,7 @@ export default function CheckoutPage() {
                 <button
                   onClick={() => setStep(2)}
                   disabled={!selectedAddress}
-                  className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Continue to Payment
                 </button>
@@ -650,30 +676,27 @@ export default function CheckoutPage() {
             )}
 
             {step === 2 && (
-              <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-                <h2 className="text-2xl font-bold flex items-center gap-3">
-                  <Lock size={24} /> Payment Method
+              <div className="bg-card border border-border rounded-xl p-4 md:p-6 space-y-6">
+                <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
+                  <Lock size={20} /> Payment Method
                 </h2>
 
                 {/* Selected Address Summary */}
                 {selectedAddress && (
-                  <div className="bg-muted/50 p-4 rounded-lg">
+                  <div className="bg-muted/50 p-3 rounded-lg">
                     <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold mb-1">Deliver to:</h4>
-                        <p className="text-sm">
-                          {selectedAddress.SS_FULL_NAME} •{" "}
-                          {selectedAddress.SS_MOBILE_NUMBER}
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1 text-sm">Deliver to:</h4>
+                        <p className="text-xs">
+                          {selectedAddress.SS_FULL_NAME} • {selectedAddress.SS_MOBILE_NUMBER}
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedAddress.SS_STREET_ADDRESS},{" "}
-                          {selectedAddress.SS_CITY}, {selectedAddress.SS_STATE}{" "}
-                          - {selectedAddress.SS_POSTAL_CODE}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {selectedAddress.SS_STREET_ADDRESS}, {selectedAddress.SS_CITY}, {selectedAddress.SS_STATE} - {selectedAddress.SS_POSTAL_CODE}
                         </p>
                       </div>
                       <button
                         onClick={() => setStep(1)}
-                        className="text-primary text-sm font-medium hover:underline"
+                        className="text-primary text-xs font-medium hover:underline ml-2"
                       >
                         Change
                       </button>
@@ -681,67 +704,161 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <div className="space-y-4">
-                  {/* UPI Payment Methods */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {paymentMethods.map((method) => (
-                      <PaymentMethodCard
-                        key={method.id}
-                        method={method}
-                        isSelected={paymentMethod === method.id}
-                        onSelect={() => setPaymentMethod(method.id)}
-                      />
-                    ))}
+                <div className="space-y-6">
+                  {/* Payment Method Tabs */}
+                  <div className="flex gap-2 border-b border-border pb-2">
+                    <button
+                      onClick={() => setPaymentMethod("upi")}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        paymentMethod === "upi"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      UPI Payment
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod("card")}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        paymentMethod === "card"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      Card & Others
+                    </button>
                   </div>
 
-                  {/* UPI ID Input */}
-                  <div className="bg-muted/50 p-4 rounded-lg">
-                    <h4 className="font-semibold mb-3">Enter UPI ID</h4>
-                    <input
-                      type="text"
-                      placeholder="yourname@upi"
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value)}
-                      className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Enter your UPI ID to receive payment request
-                    </p>
-                  </div>
+                  {paymentMethod === "upi" && (
+                    <div className="space-y-4">
+                      {/* UPI Apps */}
+                      <div>
+                        <h4 className="font-semibold mb-3 text-sm">Choose UPI App</h4>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                          {paymentMethods.map((method) => (
+                            <UpiAppCard
+                              key={method.id}
+                              method={method}
+                              isSelected={selectedUpiApp === method.id}
+                              onSelect={() => handleUpiAppSelect(method.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
 
-                  {/* QR Code for UPI */}
-                  <div className="text-center bg-white p-6 rounded-xl border border-border">
-                    <div className="bg-white p-4 rounded-lg inline-block">
-                      <QrCode className="w-32 h-32 text-gray-800 mx-auto mb-4" />
+                      {/* UPI ID Input */}
+                      <div className="bg-muted/50 p-4 rounded-lg">
+                        <h4 className="font-semibold mb-3 text-sm">Or Enter UPI ID</h4>
+                        <input
+                          type="text"
+                          placeholder="yourname@upi"
+                          value={upiId}
+                          onChange={(e) => {
+                            setUpiId(e.target.value);
+                            setSelectedUpiApp(null); // Clear app selection when typing UPI ID
+                          }}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Enter your UPI ID to receive payment request
+                        </p>
+                      </div>
+
+                      {/* QR Code for UPI */}
+                      <div className="text-center bg-white p-4 rounded-xl border border-border">
+                        <div className="bg-white p-3 rounded-lg inline-block">
+                          <QrCode className="w-24 h-24 text-gray-800 mx-auto mb-3" />
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-3">
+                          Scan QR Code to Pay
+                        </p>
+                        <p className="text-lg font-bold text-primary mt-1">
+                          ₹{finalTotal.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          UPI ID: shopstreak@upi
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-4">
-                      Scan QR Code to Pay
-                    </p>
-                    <p className="text-lg font-bold text-primary mt-2">
-                      ₹{finalTotal.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      UPI ID: shopstreak@upi
-                    </p>
-                  </div>
+                  )}
+
+                  {paymentMethod === "card" && (
+                    <div className="space-y-4">
+                      {/* Card Payment Methods */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {cardPaymentMethods.map((method) => (
+                          <PaymentMethodCard
+                            key={method.id}
+                            method={method}
+                            isSelected={paymentMethod === method.id}
+                            onSelect={() => setPaymentMethod(method.id)}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Card Payment Form */}
+                      {paymentMethod === "card" && (
+                        <div className="bg-muted/50 p-4 rounded-lg space-y-4">
+                          <h4 className="font-semibold text-sm">Card Details</h4>
+                          
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Card Number</label>
+                            <input
+                              type="text"
+                              placeholder="1234 5678 9012 3456"
+                              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium mb-1">Expiry Date</label>
+                              <input
+                                type="text"
+                                placeholder="MM/YY"
+                                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium mb-1">CVV</label>
+                              <input
+                                type="text"
+                                placeholder="123"
+                                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Cardholder Name</label>
+                            <input
+                              type="text"
+                              placeholder="John Doe"
+                              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                   <button
                     onClick={() => setStep(1)}
-                    className="flex-1 bg-muted text-foreground py-4 rounded-xl font-bold hover:bg-muted/80 transition"
+                    className="flex-1 bg-muted text-foreground py-3 rounded-xl font-bold hover:bg-muted/80 transition text-sm"
                   >
                     Back to Address
                   </button>
 
                   <button
                     onClick={handlePayment}
-                    disabled={isProcessing || !upiId}
-                    className="flex-1 bg-primary text-primary-foreground py-4 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isProcessing || (paymentMethod === "upi" && !upiId && !selectedUpiApp)}
+                    className="flex-1 bg-primary text-primary-foreground py-3 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     {isProcessing ? (
                       <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                         Processing...
                       </div>
                     ) : (
@@ -756,7 +873,7 @@ export default function CheckoutPage() {
           {/* Order Summary */}
           <div className="lg:col-span-1">
             <OrderSummary
-              items={items}
+              items={checkoutItems}
               subtotal={subtotal}
               tax={tax}
               shipping={shipping}
@@ -785,7 +902,46 @@ export default function CheckoutPage() {
   );
 }
 
-// Address Card Component - Updated
+// UPI App Card Component
+function UpiAppCard({
+  method,
+  isSelected,
+  onSelect,
+}: {
+  method: PaymentMethod;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      className={`border-2 rounded-xl p-3 transition cursor-pointer ${
+        isSelected
+          ? "border-primary bg-primary/5"
+          : "border-border hover:border-primary/50"
+      }`}
+      onClick={onSelect}
+    >
+      <div className="flex flex-col items-center gap-2">
+        {method.imageUrl ? (
+          <img
+            src={method.imageUrl}
+            alt={method.name}
+            className="w-8 h-8 object-contain"
+          />
+        ) : (
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold ${method.color}`}
+          >
+            {method.icon}
+          </div>
+        )}
+        <span className="font-medium text-xs text-center">{method.name}</span>
+      </div>
+    </div>
+  );
+}
+
+// Address Card Component
 function AddressCard({
   address,
   isSelected,
@@ -806,17 +962,17 @@ function AddressCard({
   const getAddressIcon = (type: string) => {
     switch (type) {
       case "home":
-        return <Home className="w-4 h-4" />;
+        return <Home className="w-3 h-3" />;
       case "work":
-        return <Building className="w-4 h-4" />;
+        return <Building className="w-3 h-3" />;
       default:
-        return <Navigation className="w-4 h-4" />;
+        return <Navigation className="w-3 h-3" />;
     }
   };
 
   return (
     <div
-      className={`border-2 rounded-xl p-4 transition cursor-pointer ${
+      className={`border-2 rounded-xl p-3 transition cursor-pointer ${
         isSelected
           ? "border-primary bg-primary/5"
           : "border-border hover:border-primary/50"
@@ -825,44 +981,44 @@ function AddressCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-semibold">{address.SS_FULL_NAME}</span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-sm">{address.SS_FULL_NAME}</span>
             {address.SS_IS_DEFAULT && (
-              <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-full">
+              <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-xs rounded-full">
                 Default
               </span>
             )}
             {address.SS_IS_CURRENT && (
-              <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full">
+              <span className="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded-full">
                 Current
               </span>
             )}
           </div>
 
-          <p className="text-sm mb-1">{address.SS_STREET_ADDRESS}</p>
-          <p className="text-sm text-muted-foreground mb-1">
+          <p className="text-xs mb-1">{address.SS_STREET_ADDRESS}</p>
+          <p className="text-xs text-muted-foreground mb-1">
             {address.SS_CITY}, {address.SS_STATE} - {address.SS_POSTAL_CODE}
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {address.SS_MOBILE_NUMBER}
           </p>
 
-          <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs px-2 py-1 bg-muted rounded flex items-center gap-1 capitalize">
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs px-1.5 py-0.5 bg-muted rounded flex items-center gap-1 capitalize">
               {getAddressIcon(address.SS_ADDRESS_TYPE)}
               {address.SS_ADDRESS_TYPE}
             </span>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-1 mt-2">
             {!address.SS_IS_DEFAULT && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onSetDefault();
                 }}
-                className="text-xs px-2 py-1 bg-muted hover:bg-muted/80 rounded transition"
+                className="text-xs px-2 py-0.5 bg-muted hover:bg-muted/80 rounded transition"
               >
                 Set as default
               </button>
@@ -873,7 +1029,7 @@ function AddressCard({
                   e.stopPropagation();
                   onSetCurrent();
                 }}
-                className="text-xs px-2 py-1 bg-primary text-primary-foreground rounded hover:opacity-90 transition"
+                className="text-xs px-2 py-0.5 bg-primary text-primary-foreground rounded hover:opacity-90 transition"
               >
                 Set as current
               </button>
@@ -881,40 +1037,40 @@ function AddressCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-4">
+        <div className="flex items-center gap-1 ml-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onEdit();
             }}
-            className="p-2 text-muted-foreground hover:text-primary transition"
+            className="p-1 text-muted-foreground hover:text-primary transition"
             title="Edit address"
           >
-            <Edit className="w-4 h-4" />
+            <Edit className="w-3 h-3" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            className="p-2 text-muted-foreground hover:text-destructive transition"
+            className="p-1 text-muted-foreground hover:text-destructive transition"
             title="Delete address"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3 h-3" />
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-4">
+      <div className="flex items-center justify-between mt-3">
         <div className="flex items-center gap-2">
           <div
-            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+            className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
               isSelected ? "bg-primary border-primary" : "border-border"
             }`}
           >
-            {isSelected && <Check className="w-3 h-3 text-white" />}
+            {isSelected && <Check className="w-2 h-2 text-white" />}
           </div>
-          <span className="text-sm font-medium">Deliver to this address</span>
+          <span className="text-xs font-medium">Deliver to this address</span>
         </div>
       </div>
     </div>
@@ -933,31 +1089,31 @@ function PaymentMethodCard({
 }) {
   return (
     <div
-      className={`border-2 rounded-xl p-4 transition cursor-pointer ${
+      className={`border-2 rounded-xl p-3 transition cursor-pointer ${
         isSelected
           ? "border-primary bg-primary/5"
           : "border-border hover:border-primary/50"
       }`}
       onClick={onSelect}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <div
-          className={`w-10 h-10 rounded-lg flex items-center justify-center text-white ${method.color}`}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm ${method.color}`}
         >
-          <span className="text-sm font-bold">{method.icon}</span>
+          {method.icon}
         </div>
         <div className="flex-1">
           <span className="font-semibold text-sm">{method.name}</span>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {method.description}
           </p>
         </div>
         <div
-          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+          className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
             isSelected ? "bg-primary border-primary" : "border-border"
           }`}
         >
-          {isSelected && <Check className="w-2 h-2 text-white" />}
+          {isSelected && <Check className="w-1.5 h-1.5 text-white" />}
         </div>
       </div>
     </div>
@@ -979,25 +1135,25 @@ function OrderSummary({
   finalTotal: number;
 }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-6 h-fit sticky top-20">
-      <h2 className="font-bold text-xl mb-6">Order Summary</h2>
+    <div className="bg-card border border-border rounded-xl p-4 md:p-6 h-fit sticky top-20">
+      <h2 className="font-bold text-lg md:text-xl mb-4">Order Summary</h2>
 
       {/* Items List */}
-      <div className="space-y-4 mb-6 pb-6 border-b border-border">
+      <div className="space-y-3 mb-4 pb-4 border-b border-border max-h-48 overflow-y-auto">
         {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-3">
+          <div key={item.id} className="flex items-center gap-2">
             <img
               src={item.image || "/placeholder.svg"}
               alt={item.name}
-              className="w-12 h-12 rounded-lg object-cover"
+              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm line-clamp-1">{item.name}</p>
-              <p className="text-muted-foreground text-sm">
+              <p className="font-medium text-xs line-clamp-1">{item.name}</p>
+              <p className="text-muted-foreground text-xs">
                 ₹{item.price} × {item.quantity}
               </p>
             </div>
-            <p className="font-semibold">
+            <p className="font-semibold text-sm">
               ₹{(item.price * item.quantity).toFixed(2)}
             </p>
           </div>
@@ -1005,16 +1161,16 @@ function OrderSummary({
       </div>
 
       {/* Price Breakdown */}
-      <div className="space-y-3 mb-6 pb-6 border-b border-border">
-        <div className="flex justify-between text-sm">
+      <div className="space-y-2 mb-4 pb-4 border-b border-border">
+        <div className="flex justify-between text-xs">
           <span className="text-muted-foreground">Subtotal</span>
           <span>₹{subtotal.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-sm">
+        <div className="flex justify-between text-xs">
           <span className="text-muted-foreground">Tax (18%)</span>
           <span>₹{tax.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-sm">
+        <div className="flex justify-between text-xs">
           <span className="text-muted-foreground">Shipping</span>
           <span className={shipping === 0 ? "text-green-600" : ""}>
             {shipping === 0 ? "FREE" : `₹${shipping.toFixed(2)}`}
@@ -1023,14 +1179,14 @@ function OrderSummary({
       </div>
 
       {/* Total */}
-      <div className="flex justify-between font-bold text-xl mb-6">
+      <div className="flex justify-between font-bold text-lg mb-4">
         <span>Total</span>
         <span className="text-primary">₹{finalTotal.toFixed(2)}</span>
       </div>
 
       {/* Trust Message */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-        <p className="text-green-700 text-sm font-medium">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+        <p className="text-green-700 text-xs font-medium">
           🔒 Your payment is secure and encrypted
         </p>
       </div>
@@ -1038,7 +1194,7 @@ function OrderSummary({
   );
 }
 
-// Address Form Modal Component
+// Address Form Modal Component (Keep the same as before)
 function AddressFormModal({
   address,
   onClose,
@@ -1094,14 +1250,14 @@ function AddressFormModal({
           type: "success",
           title: "Location Found",
           message: `City and state auto-filled for pincode ${pincode}`,
-          duration: 3000,
+          duration: 2000,
         });
       } else {
         addToast({
           type: "warning",
           title: "Pincode Not Found",
           message: "Please enter city and state manually",
-          duration: 5000,
+          duration: 3000,
         });
       }
     } catch (error) {
@@ -1110,7 +1266,7 @@ function AddressFormModal({
         type: "error",
         title: "Error",
         message: "Failed to fetch pincode data",
-        duration: 5000,
+        duration: 3000,
       });
     } finally {
       setIsLoadingPincode(false);
@@ -1126,7 +1282,7 @@ function AddressFormModal({
         type: "error",
         title: "Invalid Mobile Number",
         message: "Please enter a valid 10-digit mobile number",
-        duration: 5000,
+        duration: 3000,
       });
       return;
     }
@@ -1137,7 +1293,7 @@ function AddressFormModal({
         type: "error",
         title: "Invalid Pincode",
         message: "Please enter a valid 6-digit pincode",
-        duration: 5000,
+        duration: 3000,
       });
       return;
     }
@@ -1175,7 +1331,7 @@ function AddressFormModal({
           message: address
             ? "Address has been updated successfully"
             : "New address has been added successfully",
-          duration: 3000,
+          duration: 2000,
         });
         onSuccess();
       } else {
@@ -1188,7 +1344,7 @@ function AddressFormModal({
         type: "error",
         title: "Error",
         message: address ? "Failed to update address" : "Failed to add address",
-        duration: 5000,
+        duration: 3000,
       });
     } finally {
       setIsSubmitting(false);
@@ -1215,8 +1371,8 @@ function AddressFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-card border border-border rounded-xl p-4 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">
             {address ? "Edit Address" : "Add New Address"}
           </h3>
@@ -1228,9 +1384,9 @@ function AddressFormModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-1">
               Full Name *
             </label>
             <input
@@ -1239,12 +1395,12 @@ function AddressFormModal({
               value={formData.fullName}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-1">
               Mobile Number *
             </label>
             <input
@@ -1256,12 +1412,12 @@ function AddressFormModal({
               pattern="[0-9]{10}"
               maxLength={10}
               placeholder="10-digit mobile number"
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-1">
               Street Address *
             </label>
             <textarea
@@ -1269,14 +1425,14 @@ function AddressFormModal({
               value={formData.streetAddress}
               onChange={handleChange}
               required
-              rows={3}
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              rows={2}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-sm font-medium mb-1">
                 Postal Code *
               </label>
               <input
@@ -1288,10 +1444,10 @@ function AddressFormModal({
                 pattern="[0-9]{6}"
                 maxLength={6}
                 placeholder="6-digit pincode"
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               />
               {isLoadingPincode && (
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1 mt-1">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   <span className="text-xs text-muted-foreground">
                     Finding location...
@@ -1300,14 +1456,14 @@ function AddressFormModal({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-sm font-medium mb-1">
                 Address Type
               </label>
               <select
                 name="addressType"
                 value={formData.addressType}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               >
                 <option value="home">Home</option>
                 <option value="work">Work</option>
@@ -1316,32 +1472,32 @@ function AddressFormModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium mb-2">City *</label>
+              <label className="block text-sm font-medium mb-1">City *</label>
               <input
                 type="text"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">State *</label>
+              <label className="block text-sm font-medium mb-1">State *</label>
               <input
                 type="text"
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-2">
             <input
               type="checkbox"
               name="isDefault"
@@ -1354,18 +1510,18 @@ function AddressFormModal({
             </label>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-2 pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-muted text-foreground py-3 rounded-lg font-semibold hover:bg-muted/80 transition"
+              className="flex-1 bg-muted text-foreground py-2 rounded-lg font-semibold hover:bg-muted/80 transition text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50"
+              className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50 text-sm"
             >
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin mx-auto" />

@@ -1,4 +1,3 @@
-// app/product/[id]/page.jsx - COMPLETE UPDATED VERSION
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
@@ -16,6 +15,7 @@ import {
   Ban,
   Check,
   MessageSquare,
+  Zap,
 } from "lucide-react";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { useCart } from "@/components/contexts/cart-context";
@@ -24,6 +24,7 @@ import { ReviewForm } from "@/components/shared/review-form";
 import { ImageCarousel } from "@/components/shared/image-carousel";
 import { useAuth } from "@/components/contexts/auth-context";
 import { useToast } from "@/components/providers/toast-provider";
+import { useTheme } from "@/components/contexts/theme-provider";
 
 interface Product {
   id: string;
@@ -77,6 +78,7 @@ export default function ProductPage() {
   const params = useParams();
   const router = useRouter();
   const { addToast } = useToast();
+  const { theme } = useTheme();
   const productId = params.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -109,12 +111,25 @@ export default function ProductPage() {
   const { addItem } = useCart();
   const { isAuthenticated, user } = useAuth();
 
+  // Theme-based gradient classes
+  const getThemeGradient = () => {
+    switch (theme) {
+      case "ocean":
+        return "bg-gradient-to-r from-blue-600 to-cyan-500";
+      case "forest":
+        return "bg-gradient-to-r from-green-600 to-emerald-500";
+      case "sunset":
+      default:
+        return "bg-gradient-to-r from-orange-500 to-red-500";
+    }
+  };
+
   // Fetch product and initial reviews
   useEffect(() => {
     if (productId) {
       fetchProduct();
       checkWishlistStatus();
-      fetchReviews(1, 5); // Fetch reviews with proper limit
+      fetchReviews(1, 5);
     }
   }, [productId]);
 
@@ -142,10 +157,17 @@ export default function ProductPage() {
           ? [mainImage, ...uniqueImages]
           : uniqueImages;
 
-        setProduct({
+        // Format prices to remove decimals
+        const formattedProduct = {
           ...productData,
           images: finalImages,
-        });
+          price: Math.round(productData.price),
+          originalPrice: productData.originalPrice
+            ? Math.round(productData.originalPrice)
+            : undefined,
+        };
+
+        setProduct(formattedProduct);
         setRelatedProducts(data.data.relatedProducts || []);
       } else {
         setError(data.error || "Product not found");
@@ -164,25 +186,17 @@ export default function ProductPage() {
 
       setReviewsLoading(true);
       try {
-        console.log(
-          `🔄 Fetching reviews for product ${productId}, page ${page}`
-        );
-
         const response = await fetch(
           `/api/products/review?productId=${productId}&page=${page}&limit=${limit}&sortBy=recent`
         );
 
         if (!response.ok) {
-          // Don't throw error, just handle gracefully
-          console.warn(`⚠️ Reviews API returned status: ${response.status}`);
           setReviews([]);
           setReviewStats({ average: 0, total: 0, distribution: [] });
           return;
         }
 
         const result = await response.json();
-        console.log("📥 Reviews API response:", result);
-
         if (result.success) {
           const reviewsData = result.data.reviews || [];
           const summaryData = result.data.summary || {
@@ -197,14 +211,10 @@ export default function ProductPage() {
             pages: 0,
           };
 
-          console.log("✅ Setting reviews:", reviewsData);
-          console.log("✅ Setting review stats:", summaryData);
-
           setReviews(reviewsData);
           setReviewStats(summaryData);
           setReviewPagination(paginationData);
         } else {
-          console.error("Failed to fetch reviews:", result.error);
           setReviews([]);
           setReviewStats({ average: 0, total: 0, distribution: [] });
         }
@@ -280,6 +290,43 @@ export default function ProductPage() {
     }
   };
 
+  // Buy Now Functionality
+  const handleBuyNow = async () => {
+    if (!product) return;
+
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+
+    try {
+      // Create checkout item
+      const checkoutItem = {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image: product.images[0],
+        quantity: quantity,
+        inStock: product.stock > 0,
+        stock: product.stock,
+      };
+
+      // Store in session storage for checkout page
+      sessionStorage.setItem("checkoutItems", JSON.stringify([checkoutItem]));
+
+      // Navigate directly to checkout
+      router.push("/checkout");
+    } catch (error: any) {
+      console.error("Error in buy now:", error);
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to proceed with purchase",
+        duration: 5000,
+      });
+    }
+  };
+
   const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
       router.push("/auth/login");
@@ -302,6 +349,9 @@ export default function ProductPage() {
         const result = await response.json();
         if (result.success) {
           setIsWishlisted(false);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("wishlistUpdated"));
+          }
           addToast({
             type: "success",
             title: "Removed from Wishlist",
@@ -323,6 +373,9 @@ export default function ProductPage() {
         const result = await response.json();
         if (result.success) {
           setIsWishlisted(true);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("wishlistUpdated"));
+          }
           addToast({
             type: "success",
             title: "Added to Wishlist",
@@ -349,9 +402,6 @@ export default function ProductPage() {
       router.push("/auth/login");
       return;
     }
-
-    // REMOVED: Check for existing review - Allow multiple reviews
-    // Always open new review form
     setEditReview(null);
     setShowReviewForm(true);
   };
@@ -375,7 +425,6 @@ export default function ProductPage() {
 
       const result = await response.json();
       if (result.success) {
-        // Refresh reviews
         fetchReviews(reviewPagination.page);
         addToast({
           type: "success",
@@ -415,10 +464,9 @@ export default function ProductPage() {
       duration: 3000,
     });
 
-    // Refresh all data with a small delay
     setTimeout(() => {
       fetchReviews(reviewPagination.page);
-      fetchProduct(); // Refresh product to update rating
+      fetchProduct();
     }, 500);
   };
 
@@ -466,7 +514,7 @@ export default function ProductPage() {
   };
 
   const getRatingCount = (rating: number) => {
-    if (!reviewStats?.distribution || reviewStats.total === 0) return 0 + "review";
+    if (!reviewStats?.distribution || reviewStats.total === 0) return 0;
     const ratingData = reviewStats.distribution.find(
       (d: any) => d.rating === rating
     );
@@ -652,50 +700,64 @@ export default function ProductPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Back */}
             <Link
               href="/product"
-              className="flex items-center gap-2 text-primary hover:underline text-sm"
+              className="flex items-center gap-2 text-primary hover:underline text-sm whitespace-nowrap flex-shrink-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Products
             </Link>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground truncate">
+
+            <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+
+            {/* Category */}
+            <span className="text-sm text-muted-foreground truncate flex-shrink-0">
               {product.category}
             </span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm truncate">{product.name}</span>
+
+            <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+
+            {/* Product Name (Responsive Truncate) */}
+            <span className="text-sm flex-shrink-0 min-w-0 truncate sm:whitespace-normal sm:truncate-none">
+              <span className="block sm:hidden">
+                {product.name.length > 13
+                  ? product.name.slice(0, 13) + "..."
+                  : product.name}
+              </span>
+              <span className="hidden sm:block">{product.name}</span>
+            </span>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Product Main Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-8 lg:mb-12">
           {/* Images with Carousel */}
-          <div>
+          <div className="lg:sticky lg:top-24 lg:self-start">
             <ImageCarousel images={product.images} productName={product.name} />
           </div>
 
           {/* Product Info */}
-          <div className="space-y-6">
+          <div className="space-y-4 lg:space-y-6">
             <div>
               <div className="text-sm text-muted-foreground mb-2">
                 {product.category}
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold mb-4 leading-tight">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-3 lg:mb-4 leading-tight">
                 {product.name}
               </h1>
 
               {/* Rating */}
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-3 lg:gap-4 mb-3 lg:mb-4">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star
                         key={i}
-                        className={`w-5 h-5 ${
+                        className={`w-4 h-4 lg:w-5 lg:h-5 ${
                           i < Math.floor(reviewStats.average || product.rating)
                             ? "fill-yellow-500 text-yellow-500"
                             : "text-gray-300"
@@ -703,40 +765,40 @@ export default function ProductPage() {
                       />
                     ))}
                   </div>
-                  <span className="font-semibold">
+                  <span className="font-semibold text-sm lg:text-base">
                     {reviewStats.average.toFixed(1) || product.rating}
                   </span>
                 </div>
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground text-sm">
                   ({reviewStats.total || product.reviews} reviews)
                 </span>
               </div>
 
               {/* Price */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <span className="text-3xl md:text-4xl font-bold text-primary">
+              <div className="space-y-1 lg:space-y-2 mb-3 lg:mb-4">
+                <div className="flex items-baseline gap-2 lg:gap-3 flex-wrap">
+                  <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary">
                     ₹{product.price}
                   </span>
                   {product.originalPrice && (
                     <>
-                      <span className="text-xl text-muted-foreground line-through">
+                      <span className="text-lg lg:text-xl text-muted-foreground line-through">
                         ₹{product.originalPrice}
                       </span>
-                      <span className="text-lg font-bold text-green-600">
+                      <span className="text-base lg:text-lg font-bold text-green-600">
                         {discount}% OFF
                       </span>
                     </>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs lg:text-sm text-muted-foreground">
                   Inclusive of all taxes
                 </p>
               </div>
 
               {/* Stock Status */}
               <div
-                className={`text-sm font-medium mb-6 ${
+                className={`text-sm font-medium mb-4 lg:mb-6 ${
                   product.stock > 0 ? "text-green-600" : "text-red-600"
                 }`}
               >
@@ -747,88 +809,120 @@ export default function ProductPage() {
             </div>
 
             {/* Short Description */}
-            <div className="bg-muted/50 p-4 rounded-lg">
+            <div className="bg-muted/50 p-3 lg:p-4 rounded-lg">
               <p className="text-sm leading-relaxed">
                 {product.shortDescription || product.description}
               </p>
             </div>
 
             {/* Quantity & Actions */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <span className="font-medium">Quantity:</span>
-                <div className="flex items-center gap-2 bg-card border border-border p-2 rounded-lg">
+            <div className="space-y-4 lg:space-y-6">
+              <div className="flex items-center gap-3 lg:gap-4">
+                <span className="font-medium text-sm lg:text-base">
+                  Quantity:
+                </span>
+                <div className="flex items-center gap-1 lg:gap-2 bg-card border border-border p-1.5 lg:p-2 rounded-lg">
                   <button
                     onClick={() => handleQuantityChange(quantity - 1)}
                     disabled={quantity <= 1}
-                    className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-7 h-7 lg:w-8 lg:h-8 flex items-center justify-center hover:bg-muted rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm lg:text-base"
                   >
                     −
                   </button>
-                  <span className="w-8 text-center font-medium">
+                  <span className="w-6 lg:w-8 text-center font-medium text-sm lg:text-base">
                     {quantity}
                   </span>
                   <button
                     onClick={() => handleQuantityChange(quantity + 1)}
                     disabled={quantity >= maxQuantity}
-                    className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-7 h-7 lg:w-8 lg:h-8 flex items-center justify-center hover:bg-muted rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm lg:text-base"
                   >
                     +
                   </button>
                 </div>
                 {maxQuantity > 0 && (
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-xs lg:text-sm text-muted-foreground">
                     Max {maxQuantity} per order
                   </span>
                 )}
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={handleAddToCart}
-                  disabled={product.stock === 0}
-                  className="flex-1 add-to-cart-btn bg-primary text-primary-foreground py-4 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                >
-                  <ShoppingCart className="w-5 h-5" />
-                  Add to Cart
-                </button>
+              {/*  Card Style with Icons */}
+              <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                {/* Primary Actions */}
+                <div className="grid grid-cols-2 gap-3">
 
-                <button
-                  onClick={handleWishlistToggle}
-                  disabled={wishlistLoading}
-                  className={`p-4 rounded-xl border transition ${
-                    isWishlisted
-                      ? "bg-red-50 border-red-200 text-red-600"
-                      : "bg-card border-border hover:bg-muted"
-                  } ${wishlistLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  <Heart
-                    className={`w-5 h-5 ${isWishlisted ? "fill-current" : ""}`}
-                  />
-                </button>
+                  {/* Add to Cart Button */}
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={product.stock === 0}
+                    className="bg-primary text-primary-foreground py-4 rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm lg:text-base shadow-lg hover:shadow-xl"
+                  >
+                    <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5" />
+                    Add to Cart
+                  </button>
+                  {/* Buy Now Button - Rose */}
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={product.stock === 0}
+                   className="bg-gradient-to-r from-yellow-400 to-yellow-500 
+text-slate-900
+ py-4 rounded-xl font-bold 
+hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed 
+flex items-center justify-center gap-2 text-sm lg:text-base shadow-lg hover:shadow-xl"
 
-                <button
-                  onClick={handleShare}
-                  className="p-4 rounded-xl bg-card border border-border hover:bg-muted transition"
-                >
-                  <Share2 className="w-5 h-5" />
-                </button>
+
+                  >
+                    <Zap className="w-4 h-4 lg:w-5 lg:h-5" />
+                    Buy Now
+                  </button>
+                </div>
+
+                {/* Secondary Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleWishlistToggle}
+                    disabled={wishlistLoading}
+                    className={`flex-1 p-3 rounded-xl border transition ${
+                      isWishlisted
+                        ? "bg-red-50 border-red-200 text-red-600"
+                        : "bg-card border-border hover:bg-muted"
+                    } ${
+                      wishlistLoading ? "opacity-50 cursor-not-allowed" : ""
+                    } flex items-center justify-center gap-2 text-sm lg:text-base`}
+                  >
+                    <Heart
+                      className={`w-4 h-4 lg:w-5 lg:h-5 ${
+                        isWishlisted ? "fill-current" : ""
+                      }`}
+                    />
+                    <span>{isWishlisted ? "Wishlisted" : "Wishlist"}</span>
+                  </button>
+
+                  <button
+                    onClick={handleShare}
+                    className="flex-1 p-3 rounded-xl bg-card border border-border hover:bg-muted transition flex items-center justify-center gap-2 text-sm lg:text-base"
+                  >
+                    <Share2 className="w-4 h-4 lg:w-5 lg:h-5" />
+                    <span>Share</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Trust Badges */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-card border border-border rounded-xl text-center text-sm">
+            {/* Trust Badges - Mobile Optimized */}
+            <div className="grid grid-cols-2 gap-3 lg:gap-4 p-3 lg:p-4 bg-card border border-border rounded-xl text-center text-xs lg:text-sm">
               <div className="flex flex-col items-center">
-                <Truck className="w-6 h-6 text-primary mb-1" />
+                <Truck className="w-5 h-5 lg:w-6 lg:h-6 text-primary mb-1" />
                 <div className="text-muted-foreground">Free Delivery</div>
               </div>
               <div className="flex flex-col items-center">
-                <Shield className="w-6 h-6 text-primary mb-1" />
+                <Shield className="w-5 h-5 lg:w-6 lg:h-6 text-primary mb-1" />
                 <div className="text-muted-foreground">{product.warranty}</div>
               </div>
               {product.deliveryEstimate && (
                 <div className="flex flex-col items-center">
-                  <Clock className="w-6 h-6 text-primary mb-1" />
+                  <Clock className="w-5 h-5 lg:w-6 lg:h-6 text-primary mb-1" />
                   <div className="text-muted-foreground">
                     {product.deliveryEstimate.minDays}-
                     {product.deliveryEstimate.maxDays} days
@@ -837,27 +931,26 @@ export default function ProductPage() {
               )}
 
               <div className="flex flex-col items-center">
-                <Ban className="w-6 h-6 text-primary mb-1" />
+                <Ban className="w-5 h-5 lg:w-6 lg:h-6 text-primary mb-1" />
                 <div className="text-muted-foreground">No Return Policy</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Tabs Section - REMOVED Related Products Tab */}
-        <div className="mb-12">
-          <div className="border-b border-border overflow-x-auto">
-            <div className="flex gap-4 min-w-max">
+        {/* Tabs Section */}
+        <div className="mb-8 lg:mb-12">
+          <div className="border-b border-border overflow-x-auto scrollbar-thin">
+            <div className="flex gap-2 lg:gap-4 min-w-max px-1">
               {[
                 { id: "description", label: "Description" },
                 { id: "specifications", label: "Specifications" },
                 { id: "reviews", label: `Reviews (${reviewStats.total})` },
-                // REMOVED: Related Products tab
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`pb-4 px-1 border-b-2 transition whitespace-nowrap ${
+                  className={`pb-3 lg:pb-4 px-2 lg:px-3 border-b-2 transition whitespace-nowrap text-sm lg:text-base ${
                     activeTab === tab.id
                       ? "border-primary text-primary font-semibold"
                       : "border-transparent text-muted-foreground hover:text-foreground"
@@ -869,21 +962,30 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <div className="py-8">
+          <div className="py-4 lg:py-8">
             {activeTab === "description" && (
-              <div className="space-y-6">
-                <h3 className="text-2xl font-bold mb-4">Product Description</h3>
-                <p className="text-muted-foreground leading-relaxed">
+              <div className="space-y-4 lg:space-y-6">
+                <h3 className="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">
+                  Product Description
+                </h3>
+                <p className="text-muted-foreground leading-relaxed text-sm lg:text-base">
                   {product.description}
                 </p>
 
                 {product.highlights && product.highlights.length > 0 && (
                   <div>
-                    <h4 className="text-lg font-semibold mb-3">Key Features</h4>
-                    <ul className="space-y-2">
+                    <h4 className="text-lg lg:text-xl font-semibold mb-2 lg:mb-3">
+                      Key Features
+                    </h4>
+                    <ul className="space-y-1 lg:space-y-2">
                       {product.highlights.map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-3">
-                          <span className="text-primary font-bold mt-1">✓</span>
+                        <li
+                          key={idx}
+                          className="flex items-start gap-2 lg:gap-3 text-sm lg:text-base"
+                        >
+                          <span className="text-primary font-bold mt-0.5 lg:mt-1 text-sm">
+                            ✓
+                          </span>
                           <span>{feature}</span>
                         </li>
                       ))}
@@ -894,19 +996,21 @@ export default function ProductPage() {
             )}
 
             {activeTab === "specifications" && product.specifications && (
-              <div className="space-y-4">
-                <h3 className="text-2xl font-bold mb-4">Specifications</h3>
-                <div className="grid gap-4">
+              <div className="space-y-3 lg:space-y-4">
+                <h3 className="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">
+                  Specifications
+                </h3>
+                <div className="grid gap-2 lg:gap-4">
                   {Object.entries(product.specifications).map(
                     ([key, value]) => (
                       <div
                         key={key}
-                        className="flex justify-between py-3 border-b border-border"
+                        className="flex flex-col sm:flex-row sm:justify-between py-2 lg:py-3 border-b border-border gap-1"
                       >
-                        <span className="text-muted-foreground font-medium">
+                        <span className="text-muted-foreground font-medium text-sm lg:text-base">
                           {key}
                         </span>
-                        <span className="font-medium text-right">
+                        <span className="font-medium text-sm lg:text-base sm:text-right">
                           {String(value)}
                         </span>
                       </div>
@@ -920,44 +1024,46 @@ export default function ProductPage() {
           </div>
         </div>
 
-        {/* Related Products Section - MOVED BELOW TABS */}
+        {/* Related Products Section */}
         {relatedProducts.length > 0 && (
-          <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold">Related Products</h3>
+          <div className="mb-8 lg:mb-12">
+            <div className="flex items-center justify-between mb-4 lg:mb-6">
+              <h3 className="text-xl lg:text-2xl font-bold">
+                Related Products
+              </h3>
               <Link
                 href="/product"
-                className="text-primary hover:underline font-medium"
+                className="text-primary hover:underline font-medium text-sm lg:text-base"
               >
                 View All
               </Link>
             </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
               {relatedProducts.map((relatedProduct) => (
                 <Link
                   key={relatedProduct.id}
                   href={`/product/${relatedProduct.id}`}
-                  className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300"
+                  className="group bg-card border border-border rounded-lg lg:rounded-xl overflow-hidden hover:shadow-lg lg:hover:shadow-xl transition-all duration-300"
                 >
-                  <div className="relative bg-muted overflow-hidden h-48">
+                  <div className="relative bg-muted overflow-hidden h-32 sm:h-36 lg:h-48">
                     <img
                       src={relatedProduct.image}
                       alt={relatedProduct.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     />
                   </div>
-                  <div className="p-4">
-                    <h4 className="font-semibold text-sm line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+                  <div className="p-2 lg:p-4">
+                    <h4 className="font-semibold text-xs lg:text-sm line-clamp-2 mb-1 lg:mb-2 group-hover:text-primary transition-colors leading-tight">
                       {relatedProduct.name}
                     </h4>
                     <div className="flex items-end justify-between">
-                      <span className="text-lg font-bold text-primary">
-                        ₹{relatedProduct.price}
+                      <span className="text-sm lg:text-lg font-bold text-primary">
+                        ₹{Math.round(relatedProduct.price)}
                       </span>
                       <div className="flex items-center gap-1 text-xs">
                         <span>⭐</span>
-                        <span className="text-muted-foreground">
+                        <span className="text-muted-foreground text-xs">
                           {relatedProduct.rating}
                         </span>
                       </div>
@@ -973,18 +1079,18 @@ export default function ProductPage() {
       {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full">
+          <div className="bg-card border border-border rounded-xl p-4 lg:p-6 max-w-sm w-full">
             <h3 className="text-lg font-bold mb-4">Share Product</h3>
-            <div className="space-y-3">
+            <div className="space-y-2 lg:space-y-3">
               <button
                 onClick={copyToClipboard}
-                className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:opacity-90 transition"
+                className="w-full bg-primary text-primary-foreground py-2 lg:py-3 rounded-lg font-semibold hover:opacity-90 transition text-sm lg:text-base"
               >
                 Copy Link
               </button>
               <button
                 onClick={() => setShowShareModal(false)}
-                className="w-full bg-muted text-foreground py-3 rounded-lg font-semibold hover:bg-muted/80 transition"
+                className="w-full bg-muted text-foreground py-2 lg:py-3 rounded-lg font-semibold hover:bg-muted/80 transition text-sm lg:text-base"
               >
                 Cancel
               </button>

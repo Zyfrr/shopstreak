@@ -21,9 +21,9 @@ export function Logo({
 
   // Set logo size based on prop
   const sizeMap = {
-    sm: { svgSize: "w-7 h-7", textSize: "text-sm" },
-    md: { svgSize: "w-9 h-9", textSize: "text-base" },
-    lg: { svgSize: "w-12 h-12", textSize: "text-lg" },
+    sm: { svgSize: "w-11 h-11", textSize: "text-sm" },
+    md: { svgSize: "w-12 h-12", textSize: "text-base" },
+    lg: { svgSize: "w-14 h-14", textSize: "text-lg" },
   };
 
   const { svgSize, textSize } = sizeMap[size];

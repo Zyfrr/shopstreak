@@ -88,7 +88,7 @@ export async function POST(request) {
     await payment.save();
     await order.save();
 
-    // Update product stock
+    // Update product stock (but DON'T clear cart)
     for (const item of order.SS_ORDER_ITEMS) {
       await SS_Product.findByIdAndUpdate(
         item.SS_PRODUCT_ID,

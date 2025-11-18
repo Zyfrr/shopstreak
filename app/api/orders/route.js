@@ -99,7 +99,7 @@ export async function POST(request) {
       );
     }
 
-    // Get user's cart to verify items
+    // Get user's cart to verify items (but don't clear it)
     const cart = await SS_Cart.findOne({ SS_USER_ID: user.id })
       .populate({
         path: 'SS_ITEMS.SS_PRODUCT_ID',
@@ -245,7 +245,7 @@ export async function POST(request) {
       await payment.save();
       await order.save();
 
-      // Update product stock
+      // Update product stock (but DON'T clear cart)
       for (const item of items) {
         await SS_Product.findByIdAndUpdate(
           item.id,
@@ -257,11 +257,11 @@ export async function POST(request) {
         );
       }
 
-      // Clear cart items that were ordered
-      cart.SS_ITEMS = cart.SS_ITEMS.filter(
-        cartItem => !items.some(item => item.id === cartItem.SS_PRODUCT_ID?._id?.toString())
-      );
-      await cart.save();
+      // REMOVED: Cart clearing logic - keep items in cart
+      // cart.SS_ITEMS = cart.SS_ITEMS.filter(
+      //   cartItem => !items.some(item => item.id === cartItem.SS_PRODUCT_ID?._id?.toString())
+      // );
+      // await cart.save();
     }
 
     return NextResponse.json(ApiResponse.success({

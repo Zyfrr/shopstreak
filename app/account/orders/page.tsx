@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Clock,
   X,
-  IndianRupee
+  IndianRupee,
 } from "lucide-react";
 
 import { AccountLayout } from "@/components/layout/account-layout";
@@ -23,7 +23,13 @@ interface Order {
   orderNumber: string;
   date: string;
   total: number;
-  status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
+  status:
+    | "pending"
+    | "confirmed"
+    | "processing"
+    | "shipped"
+    | "delivered"
+    | "cancelled";
   paymentStatus: string;
   items: number;
   products: {
@@ -61,9 +67,9 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch('/api/orders', {
+      const response = await fetch("/api/orders", {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -74,21 +80,22 @@ export default function OrdersPage() {
         }
       }
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error("Error fetching orders:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
+  const filteredOrders = orders.filter((order) => {
+    const matchesSearch =
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.products.some(product => 
+      order.products.some((product) =>
         product.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
-    
-    const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-    
+
+    const matchesStatus =
+      statusFilter === "all" || order.status === statusFilter;
+
     return matchesSearch && matchesStatus;
   });
 
@@ -113,21 +120,25 @@ export default function OrdersPage() {
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case "delivered":
-        return <Package className="w-5 h-5 text-green-600" />;
+        return <Package className="w-5 h-5 text-green-300" />;
+
       case "shipped":
-        return <Truck className="w-5 h-5 text-blue-600" />;
+        return <Truck className="w-5 h-5 text-sky-300" />;
+
       case "processing":
       case "confirmed":
-        return <Clock className="w-5 h-5 text-yellow-600 animate-spin" />;
+        return <Clock className="w-5 h-5 text-yellow-300 animate-spin" />;
+
       case "pending":
-        return <Calendar className="w-5 h-5 text-orange-600" />;
+        return <Calendar className="w-5 h-5 text-orange-300" />;
+
       case "cancelled":
-        return <X className="w-5 h-5 text-red-600" />;
+        return <X className="w-5 h-5 text-red-300" />;
+
       default:
-        return <Package className="w-5 h-5 text-gray-500" />;
+        return <Package className="w-5 h-5 text-gray-300" />;
     }
   };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
       year: "numeric",
@@ -142,7 +153,7 @@ export default function OrdersPage() {
       month: "short",
       day: "numeric",
       hour: "2-digit",
-      minute: "2-digit"
+      minute: "2-digit",
     });
   };
 
@@ -224,7 +235,10 @@ export default function OrdersPage() {
         <div className="bg-card border border-border rounded-lg p-4 text-center">
           <IndianRupee className="w-6 h-6 text-purple-500 mx-auto mb-2" />
           <p className="text-xl font-bold">
-            ₹{orders.reduce((sum, order) => sum + order.total, 0).toLocaleString('en-IN')}
+            ₹
+            {orders
+              .reduce((sum, order) => sum + order.total, 0)
+              .toLocaleString("en-IN")}
           </p>
           <p className="text-xs text-muted-foreground">Total Spent</p>
         </div>
@@ -234,13 +248,14 @@ export default function OrdersPage() {
         <div className="bg-card border border-border rounded-lg p-12 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
           <h3 className="text-lg font-semibold mb-2">
-            {searchTerm || statusFilter !== "all" ? "No Orders Found" : "No Orders Yet"}
+            {searchTerm || statusFilter !== "all"
+              ? "No Orders Found"
+              : "No Orders Yet"}
           </h3>
           <p className="text-muted-foreground mb-6">
-            {searchTerm || statusFilter !== "all" 
+            {searchTerm || statusFilter !== "all"
               ? "Try adjusting your search or filter criteria"
-              : "You haven't placed any orders yet"
-            }
+              : "You haven't placed any orders yet"}
           </p>
           {!searchTerm && statusFilter === "all" && (
             <Link
@@ -258,60 +273,99 @@ export default function OrdersPage() {
               key={order.id}
               className="bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200"
             >
-              {/* Order Header */}
               <button
                 onClick={() =>
-                  setExpandedOrder(
-                    expandedOrder === order.id ? null : order.id
-                  )
+                  setExpandedOrder(expandedOrder === order.id ? null : order.id)
                 }
-                className="w-full p-4 sm:p-6 flex items-center justify-between hover:bg-muted/50 transition"
+                className="
+    w-full p-4 sm:p-5 rounded-xl border border-[#d5d9d9] 
+    bg-[#f7fafa] hover:bg-[#eef2f2] transition-all 
+    flex flex-col gap-4 text-left shadow-sm
+  "
               >
-                <div className="flex items-center gap-3 sm:gap-4 flex-1 text-left">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-muted rounded-lg flex items-center justify-center text-lg sm:text-xl flex-shrink-0">
-                    {getStatusIcon(order.status)}
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <p className="font-semibold text-base sm:text-lg truncate">
-                      Order {order.orderNumber}
-                    </p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      {formatDate(order.date)} • {order.items} item
-                      {order.items > 1 ? "s" : ""}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border ${getStatusColor(
-                          order.status
-                        )}`}
-                      >
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </span>
-                      {order.paymentStatus === 'paid' && (
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full border border-green-300">
-                          Paid
-                        </span>
-                      )}
+                {/* Top Row — Icon + Order Info + Arrow */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    {/* Amazon-style Icon Box */}
+                    <div
+                      className="
+    w-10 h-10 sm:w-11 sm:h-11 
+    bg-[#0a1a2b]
+ text-white 
+    flex items-center justify-center 
+    rounded-lg shadow-md
+  "
+                    >
+                      {getStatusIcon(order.status)}
+                    </div>
+
+                    {/* Order Title + Date */}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm sm:text-base truncate text-[#111]">
+                        Order {order.orderNumber}
+                      </p>
+
+                      <p className="text-xs text-[#555] truncate">
+                        {formatDate(order.date)} • {order.items} item
+                        {order.items > 1 && "s"}
+                      </p>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-4 sm:gap-6 ml-2">
-                  <div className="text-right hidden sm:block">
-                    <p className="font-bold text-lg">₹{order.total}</p>
-                  </div>
+                  {/* Arrow */}
                   <ChevronRight
-                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform flex-shrink-0 ${
-                      expandedOrder === order.id ? "rotate-90" : ""
-                    }`}
+                    className={`
+        w-4 h-4 text-[#444] transition-transform
+        ${expandedOrder === order.id ? "rotate-90" : ""}
+      `}
                   />
                 </div>
-              </button>
 
-              {/* Mobile total */}
-              <div className="sm:hidden px-4 pb-4 -mt-2">
-                <p className="font-bold text-lg text-primary">₹{order.total}</p>
-              </div>
+                {/* Status Badges — Amazon Dark Theme */}
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  {/* Status Badge */}
+                  <span
+                    className={`
+        text-[11px] font-semibold px-3 py-1 
+        rounded-md shadow-sm border 
+        ${
+          order.status === "confirmed" &&
+          "bg-green-700 text-white border-green-800"
+        }
+        ${
+          order.status === "pending" &&
+          "bg-yellow-600 text-black border-yellow-700"
+        }
+        ${
+          order.status === "cancelled" && "bg-red-700 text-white border-red-800"
+        }
+      `}
+                  >
+                    {order.status.charAt(0).toUpperCase() +
+                      order.status.slice(1)}
+                  </span>
+
+                  {/* Paid Badge */}
+                  {order.paymentStatus === "paid" && (
+                    <span
+                      className="
+          text-[11px] font-semibold px-3 py-1 
+          rounded-md shadow-sm border
+          bg-[#146eb4] text-white border-[#0f568c]
+        "
+                    >
+                      Paid
+                    </span>
+                  )}
+                </div>
+
+                {/* Total Amount — Amazon Blue */}
+                <div className="flex items-center justify-end mt-1">
+                  <p className="font-bold text-lg text-[#007185]">
+                    ₹{order.total}
+                  </p>
+                </div>
+              </button>
 
               {/* Order Details */}
               {expandedOrder === order.id && (
@@ -322,7 +376,9 @@ export default function OrdersPage() {
                       <p className="text-xs text-muted-foreground uppercase font-semibold mb-1">
                         Order ID
                       </p>
-                      <p className="font-semibold font-mono text-sm">{order.orderNumber}</p>
+                      <p className="font-semibold font-mono text-sm">
+                        {order.orderNumber}
+                      </p>
                     </div>
                     <div className="bg-background rounded-lg p-3 sm:p-4">
                       <p className="text-xs text-muted-foreground uppercase font-semibold mb-1">
@@ -365,16 +421,25 @@ export default function OrdersPage() {
                       ></div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Current Status: <span className="font-semibold text-foreground">{order.tracking.currentStatus}</span>
+                      Current Status:{" "}
+                      <span className="font-semibold text-foreground">
+                        {order.tracking.currentStatus}
+                      </span>
                       {order.tracking.estimatedDelivery && (
-                        <> • Est. Delivery: {formatDate(order.tracking.estimatedDelivery)}</>
+                        <>
+                          {" "}
+                          • Est. Delivery:{" "}
+                          {formatDate(order.tracking.estimatedDelivery)}
+                        </>
                       )}
                     </p>
                   </div>
 
                   {/* Products */}
                   <div>
-                    <h4 className="font-semibold mb-3 text-sm sm:text-base">Products</h4>
+                    <h4 className="font-semibold mb-3 text-sm sm:text-base">
+                      Products
+                    </h4>
                     <div className="space-y-3">
                       {order.products.map((product) => (
                         <div
@@ -401,7 +466,8 @@ export default function OrdersPage() {
                               ₹{product.price}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              ₹{(product.price * product.quantity).toFixed(2)} total
+                              ₹{(product.price * product.quantity).toFixed(2)}{" "}
+                              total
                             </p>
                           </div>
                         </div>
@@ -410,7 +476,7 @@ export default function OrdersPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border">
+                  <div className="flex flex-row sm:flex-row gap-3 pt-4 border-t border-border">
                     <Link
                       href={`/account/orders/${order.id}`}
                       className="flex-1 text-center px-4 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition text-sm"

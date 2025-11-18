@@ -73,20 +73,14 @@ export function Header() {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      // Close desktop theme dropdown
-      if (
-        desktopThemeRef.current &&
-        !desktopThemeRef.current.contains(target)
-      ) {
+      if (desktopThemeRef.current && !desktopThemeRef.current.contains(target)) {
         setDesktopThemeOpen(false);
       }
 
-      // Close mobile theme dropdown
       if (mobileThemeRef.current && !mobileThemeRef.current.contains(target)) {
         setMobileThemeOpen(false);
       }
 
-      // Close search results
       if (searchRef.current && !searchRef.current.contains(target)) {
         setShowSearchResults(false);
       }
@@ -97,6 +91,28 @@ export function Header() {
       document.removeEventListener("click", handleClickOutside);
     };
   }, []);
+
+  // Enhanced wishlist count management with real-time updates
+  useEffect(() => {
+    const handleWishlistUpdate = () => {
+      fetchWishlistCount();
+    };
+
+    window.addEventListener('wishlistUpdated', handleWishlistUpdate);
+    
+    return () => {
+      window.removeEventListener('wishlistUpdated', handleWishlistUpdate);
+    };
+  }, [isAuthenticated]);
+
+  // Refresh wishlist count on route changes and auth changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchWishlistCount();
+    } else {
+      setWishlistCount(0);
+    }
+  }, [pathname, isAuthenticated]);
 
   // Close all dropdowns when route changes
   useEffect(() => {
@@ -127,9 +143,12 @@ export function Header() {
     }
   }, [user, customerProfile, mounted]);
 
-  // Fetch wishlist count
+  // Fetch wishlist count with error handling
   const fetchWishlistCount = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setWishlistCount(0);
+      return;
+    }
 
     try {
       const token = localStorage.getItem("accessToken");
@@ -144,13 +163,17 @@ export function Header() {
         if (result.success) {
           setWishlistCount(result.data.items?.length || 0);
         }
+      } else {
+        setWishlistCount(0);
       }
     } catch (error) {
       console.error("Error fetching wishlist count:", error);
+      setWishlistCount(0);
     }
   };
 
-  useEffect(() => {
+  // Force immediate wishlist refresh
+  const forceWishlistRefresh = useCallback(() => {
     if (isAuthenticated) {
       fetchWishlistCount();
     }
@@ -160,7 +183,7 @@ export function Header() {
     return null;
   }
 
-  // Enhanced category mapping system
+  // Category mapping system
   const categoryMapping = {
     Electronics: "Electronics",
     "Home & Living": "Home & Living",
@@ -172,31 +195,26 @@ export function Header() {
 
   // Helper function to create category URLs
   const createCategoryUrl = (categoryKey: string) => {
-    const categoryValue =
-      categoryMapping[categoryKey as keyof typeof categoryMapping];
+    const categoryValue = categoryMapping[categoryKey as keyof typeof categoryMapping];
     return `/product?category=${encodeURIComponent(categoryValue)}`;
   };
 
-  // IMPROVED: Active state checking function
-  const isNavItemActive = (href: string, label: string) => {
-    // For home page
+  // Active state checking function
+  const isNavItemActive = (href: string) => {
     if (href === "/" && pathname === "/") return true;
     
-    // For products page without category
     if (href === "/product" && pathname === "/product" && !searchParams.get('category')) return true;
     
-    // For category pages - check if current category matches
     if (href.startsWith("/product?category=")) {
       const currentCategory = searchParams.get('category');
       const hrefCategory = new URLSearchParams(href.split('?')[1]).get('category');
       return currentCategory === hrefCategory;
     }
     
-    // For exact matches
     return pathname === href;
   };
 
-  // Updated desktop navigation using the helper function
+  // Desktop navigation items
   const desktopNavItems = [
     { label: "Home", href: "/" },
     { label: "Products", href: "/product" },
@@ -211,27 +229,21 @@ export function Header() {
       id: "sunset",
       name: "Sunset",
       icon: <HiSun className="w-4 h-4 text-orange-500" />,
-      activeColor: "bg-orange-500",
     },
     {
       id: "ocean",
       name: "Ocean",
       icon: <HiSun className="w-4 h-4 text-blue-500" />,
-      activeColor: "bg-blue-500",
     },
     {
       id: "forest",
       name: "Forest",
       icon: <HiSun className="w-4 h-4 text-green-500" />,
-      activeColor: "bg-green-500",
     },
   ];
 
   // Check if search should be visible
-  const isSearchVisible =
-    pathname === "/" ||
-    pathname === "/product" ||
-    pathname.startsWith("/product/");
+  const isSearchVisible = pathname === "/" || pathname === "/product" || pathname.startsWith("/product/");
 
   // Enhanced search with debouncing
   const handleSearch = useCallback(async (query: string) => {
@@ -254,9 +266,7 @@ export function Header() {
 
       searchTimeoutRef.current = setTimeout(async () => {
         try {
-          const response = await fetch(
-            `/api/products/search?q=${encodeURIComponent(query)}&limit=8`
-          );
+          const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=8`);
           const data = await response.json();
           if (data.success) {
             setSearchResults(data.data);
@@ -286,16 +296,11 @@ export function Header() {
     }
   };
 
-  // FIXED: Search result click handler
+  // Search result click handler
   const handleResultClick = (productId: string) => {
-    console.log("🎯 Desktop search result clicked:", productId);
-
-    // Close search results immediately
     setShowSearchResults(false);
     setSearchQuery("");
     setSearchResults([]);
-
-    // Use setTimeout to ensure UI updates before navigation
     setTimeout(() => {
       router.push(`/product/${productId}`);
     }, 10);
@@ -319,16 +324,12 @@ export function Header() {
     router.push("/");
   };
 
-  // FIXED: Desktop Profile Navigation
+  // Desktop Profile Navigation
   const handleDesktopProfileNavigation = (path: string) => {
-    console.log("🖥️ Desktop navigation to:", path);
-
     if (!isAuthenticated) {
       router.push(`/auth/login?redirect=${encodeURIComponent(path)}`);
       return;
     }
-
-    // Navigate immediately
     router.push(path);
   };
 
@@ -364,9 +365,7 @@ export function Header() {
     if (!isAuthenticated) {
       e.preventDefault();
       closeAllDropdowns();
-      router.push(
-        `/auth/login?redirect=${encodeURIComponent("/checkout/cart")}`
-      );
+      router.push(`/auth/login?redirect=${encodeURIComponent("/checkout/cart")}`);
     } else {
       closeAllDropdowns();
     }
@@ -377,11 +376,11 @@ export function Header() {
     if (!isAuthenticated) {
       e.preventDefault();
       closeAllDropdowns();
-      router.push(
-        `/auth/login?redirect=${encodeURIComponent("/account/wishlist")}`
-      );
+      router.push(`/auth/login?redirect=${encodeURIComponent("/account/wishlist")}`);
     } else {
       closeAllDropdowns();
+      // Force refresh when navigating to wishlist
+      setTimeout(forceWishlistRefresh, 100);
     }
   };
 
@@ -421,16 +420,8 @@ export function Header() {
         {/* Desktop Layout */}
         <div className="hidden md:flex items-center justify-between gap-4">
           {/* Logo */}
-          <Link
-            href="/"
-            className="flex items-center space-x-2 shrink-0"
-            onClick={closeAllDropdowns}
-          >
-            <Logo
-              size="lg"
-              showText={true}
-              className="hover:scale-105 transition-transform duration-200"
-            />
+          <Link href="/" className="flex items-center space-x-2 shrink-0" onClick={closeAllDropdowns}>
+            <Logo size="lg" showText={true} className="hover:scale-105 transition-transform duration-200" />
           </Link>
 
           {/* Desktop Navigation Menu */}
@@ -441,9 +432,7 @@ export function Header() {
                 href={item.href}
                 onClick={handleNavItemClick}
                 className={`text-sm font-medium transition-colors hover:text-primary ${
-                  isNavItemActive(item.href, item.label)
-                    ? "text-primary font-semibold"
-                    : "text-foreground/80"
+                  isNavItemActive(item.href) ? "text-primary font-semibold" : "text-foreground/80"
                 }`}
               >
                 {item.label}
@@ -451,12 +440,9 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Desktop Search Bar - INCREASED WIDTH */}
+          {/* Desktop Search Bar */}
           {isSearchVisible && (
-            <div
-              className="hidden md:block flex-1 max-w-3xl mx-4"
-              ref={searchRef}
-            >
+            <div className="hidden md:block flex-1 max-w-3xl mx-4" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   type="text"
@@ -466,17 +452,13 @@ export function Header() {
                   onFocus={handleSearchFocus}
                   className="w-full px-4 py-2 pr-10 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 />
-                <button
-                  type="submit"
-                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition"
-                >
+                <button type="submit" className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition">
                   <HiSearch className="w-5 h-5" />
                 </button>
 
-                {/* Enhanced Search Results Dropdown - FIXED NAVIGATION */}
+                {/* Search Results Dropdown */}
                 {showSearchResults && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] max-h-96 overflow-y-auto">
-                    {/* Loading State */}
                     {searchLoading && (
                       <div className="p-4 text-center text-sm text-muted-foreground">
                         <div className="flex items-center justify-center gap-2">
@@ -486,7 +468,6 @@ export function Header() {
                       </div>
                     )}
 
-                    {/* Search Results - FIXED: Using proper button with onClick */}
                     {!searchLoading && searchResults.length > 0 && (
                       <>
                         <div className="p-3 border-b border-border bg-muted/30">
@@ -511,16 +492,10 @@ export function Header() {
                               onError={handleImageError}
                             />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate text-foreground">
-                                {product.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground capitalize">
-                                {product.category}
-                              </p>
+                              <p className="text-sm font-medium truncate text-foreground">{product.name}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{product.category}</p>
                             </div>
-                            <p className="text-sm font-semibold text-primary whitespace-nowrap">
-                              ₹{product.price}
-                            </p>
+                            <p className="text-sm font-semibold text-primary whitespace-nowrap">₹{product.price}</p>
                           </button>
                         ))}
                         <div className="p-3 border-t border-border bg-muted/30">
@@ -534,43 +509,10 @@ export function Header() {
                       </>
                     )}
 
-                    {/* No Results */}
-                    {!searchLoading &&
-                      searchQuery.length > 1 &&
-                      searchResults.length === 0 && (
-                        <div className="p-4 text-center">
-                          <p className="text-sm text-muted-foreground">
-                            No products found for "{searchQuery}"
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Try different keywords or browse categories
-                          </p>
-                        </div>
-                      )}
-
-                    {/* Quick Search Suggestions */}
-                    {!searchLoading && searchQuery.length === 0 && (
-                      <div className="p-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">
-                          Popular Searches
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {[
-                            "Headphones",
-                            "Smartwatch",
-                            "T-Shirt",
-                            "Shoes",
-                            "Laptop",
-                          ].map((term) => (
-                            <button
-                              key={term}
-                              onClick={() => handleSearch(term)}
-                              className="px-3 py-1 text-xs bg-muted hover:bg-muted/80 rounded-full transition-colors"
-                            >
-                              {term}
-                            </button>
-                          ))}
-                        </div>
+                    {!searchLoading && searchQuery.length > 1 && searchResults.length === 0 && (
+                      <div className="p-4 text-center">
+                        <p className="text-sm text-muted-foreground">No products found for "{searchQuery}"</p>
+                        <p className="text-xs text-muted-foreground mt-1">Try different keywords or browse categories</p>
                       </div>
                     )}
                   </div>
@@ -661,16 +603,12 @@ export function Header() {
                   <HiTruck className="w-5 h-5" />
                 </Link>
 
-                {/* User Profile Dropdown - USING RADIX UI */}
+                {/* User Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-2 p-2 hover:bg-muted rounded-lg transition-colors border border-transparent hover:border-border">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-semibold leading-none shadow-sm">
-                        {userInitial ? (
-                          userInitial
-                        ) : (
-                          <HiUser className="w-4 h-4" />
-                        )}
+                        {userInitial ? userInitial : <HiUser className="w-4 h-4" />}
                       </div>
                     </button>
                   </DropdownMenuTrigger>
@@ -678,58 +616,33 @@ export function Header() {
                     <DropdownMenuLabel>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-semibold">
-                          {userInitial ? (
-                            userInitial
-                          ) : (
-                            <HiUser className="w-4 h-4" />
-                          )}
+                          {userInitial ? userInitial : <HiUser className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">
-                            {displayName}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {user?.email}
-                          </p>
+                          <p className="text-sm font-semibold truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                         </div>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => handleDesktopProfileNavigation("/account")}
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account")}>
                       <HiUser className="w-4 h-4 mr-2" />
                       My Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/account/orders")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account/orders")}>
                       <HiTruck className="w-4 h-4 mr-2" />
                       My Orders
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/info/about")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/info/about")}>
                       <HiInformationCircle className="w-4 h-4 mr-2" />
                       About Us
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/account/settings")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account/settings")}>
                       <HiCog className="w-4 h-4 mr-2" />
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      className="text-destructive"
-                    >
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                       <HiLogout className="w-4 h-4 mr-2" />
                       Logout
                     </DropdownMenuItem>
@@ -752,26 +665,18 @@ export function Header() {
 
         {/* Mobile Layout */}
         <div className="md:hidden flex items-center justify-between gap-2">
-          {/* Logo - Smaller on mobile */}
-          <Link
-            href="/"
-            className="flex items-center shrink-0"
-            onClick={closeAllDropdowns}
-          >
-            <Logo
-              size="sm"
-              showText={false}
-              className="hover:scale-105 transition-transform duration-200"
-            />
+          {/* Logo */}
+          <Link href="/" className="flex items-center shrink-0" onClick={closeAllDropdowns}>
+            <Logo size="sm" showText={false} className="hover:scale-105 transition-transform duration-200" />
           </Link>
+          
           {!isSearchVisible && (
-            <div className="md:hidden flex-1 text-center  ">
-              <h1 className="text-base font-bold text-primary text-xl">
-                ShopStreak
-              </h1>
+            <div className="md:hidden flex-1 text-center">
+              <h1 className="text-base font-bold text-primary text-xl">ShopStreak</h1>
             </div>
           )}
-          {/* Mobile Search Bar - INCREASED WIDTH & REDUCED HEIGHT */}
+          
+          {/* Mobile Search Bar */}
           {isSearchVisible && (
             <div className="flex-1 min-w-0 mx-2" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative w-full">
@@ -781,50 +686,15 @@ export function Header() {
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   onFocus={handleSearchFocus}
-                  className="
-                    w-full 
-                    px-3 
-                    py-1.5    /* reduced height */
-                    pr-10 
-                    bg-background 
-                    border border-border 
-                    rounded-md  
-                    text-sm     
-                    focus:outline-none 
-                    focus:ring-2 
-                    focus:ring-primary 
-                    focus:border-transparent
-                    transition-all
-                  "
+                  className="w-full px-3 py-1.5 pr-10 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 />
-
-                {/* Search Icon */}
-                <button
-                  type="submit"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
-                >
+                <button type="submit" className="absolute right-2 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
                   <HiSearch className="w-4 h-4" />
                 </button>
 
                 {/* Mobile Search Dropdown */}
                 {showSearchResults && (
-                  <div
-                    className="
-                      absolute 
-                      top-full 
-                      left-0 
-                      right-0 
-                      mt-1 
-                      bg-card 
-                      border border-border 
-                      rounded-lg 
-                      shadow-xl 
-                      z-[100] 
-                      max-h-64  /* reduced height */
-                      overflow-y-auto
-                    "
-                  >
-                    {/* Loading */}
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-[100] max-h-64 overflow-y-auto">
                     {searchLoading && (
                       <div className="p-3 text-center text-sm text-muted-foreground">
                         <div className="flex items-center justify-center gap-2">
@@ -834,7 +704,6 @@ export function Header() {
                       </div>
                     )}
 
-                    {/* Results */}
                     {!searchLoading && searchResults.length > 0 && (
                       <>
                         <div className="p-2 border-b border-border bg-muted/30">
@@ -842,7 +711,6 @@ export function Header() {
                             Found {searchResults.length} products
                           </p>
                         </div>
-
                         {searchResults.map((product) => (
                           <button
                             key={product.id}
@@ -851,40 +719,21 @@ export function Header() {
                               e.stopPropagation();
                               handleResultClick(product.id);
                             }}
-                            className="
-                              w-full 
-                              flex 
-                              items-center 
-                              gap-2  /* reduced gap */
-                              p-2    /* reduced padding */
-                              hover:bg-muted/50 
-                              transition-colors 
-                              text-left 
-                              border-b border-border 
-                              last:border-b-0
-                            "
+                            className="w-full flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors text-left border-b border-border last:border-b-0"
                           >
                             <img
                               src={product.image || "/placeholder.svg"}
                               alt={product.name}
-                              className="w-10 h-10 rounded-md object-cover" /* smaller image */
+                              className="w-10 h-10 rounded-md object-cover"
                               onError={handleImageError}
                             />
-
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {product.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground capitalize">
-                                {product.category}
-                              </p>
-                              <p className="text-xs font-semibold text-primary mt-0.5">
-                                ₹{product.price}
-                              </p>
+                              <p className="text-sm font-medium truncate">{product.name}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{product.category}</p>
+                              <p className="text-xs font-semibold text-primary mt-0.5">₹{product.price}</p>
                             </div>
                           </button>
                         ))}
-
                         <div className="p-2 border-t border-border bg-muted/30">
                           <button
                             onClick={handleSearchSubmit}
@@ -896,22 +745,19 @@ export function Header() {
                       </>
                     )}
 
-                    {/* Empty State */}
-                    {!searchLoading &&
-                      searchQuery.length > 1 &&
-                      searchResults.length === 0 && (
-                        <div className="p-3 text-center text-sm text-muted-foreground">
-                          <p>No products found for "{searchQuery}"</p>
-                          <p className="text-xs mt-1">Try different keywords</p>
-                        </div>
-                      )}
+                    {!searchLoading && searchQuery.length > 1 && searchResults.length === 0 && (
+                      <div className="p-3 text-center text-sm text-muted-foreground">
+                        <p>No products found for "{searchQuery}"</p>
+                        <p className="text-xs mt-1">Try different keywords</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </form>
             </div>
           )}
 
-          {/* Mobile Right Section - Theme, Wishlist, Profile */}
+          {/* Mobile Right Section */}
           <div className="flex items-center gap-1">
             {/* Mobile Theme Selector */}
             <div className="relative" ref={mobileThemeRef}>
@@ -931,16 +777,12 @@ export function Header() {
                         key={themeOption.id}
                         onClick={() => handleThemeChange(themeOption.id)}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all ${
-                          theme === themeOption.id
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted"
+                          theme === themeOption.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                         }`}
                       >
                         {themeOption.icon}
                         {themeOption.name}
-                        {theme === themeOption.id && (
-                          <span className="ml-auto text-xs">✓</span>
-                        )}
+                        {theme === themeOption.id && <span className="ml-auto text-xs">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -964,7 +806,7 @@ export function Header() {
 
             {isAuthenticated ? (
               <>
-                {/* Mobile Profile Dropdown - USING RADIX UI */}
+                {/* Mobile Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="p-1.5 hover:bg-muted rounded-lg transition-colors flex items-center gap-1">
@@ -980,51 +822,30 @@ export function Header() {
                           {userInitial || <HiUser className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">
-                            {displayName}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {user?.email}
-                          </p>
+                          <p className="text-sm font-semibold truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                         </div>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => handleDesktopProfileNavigation("/account")}
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account")}>
                       <HiUser className="w-4 h-4 mr-2" />
                       My Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/account/orders")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account/orders")}>
                       <HiTruck className="w-4 h-4 mr-2" />
                       My Orders
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/info/contact")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/info/contact")}>
                       <HiPhone className="w-4 h-4 mr-2" />
                       Contact Us
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        handleDesktopProfileNavigation("/account/settings")
-                      }
-                    >
+                    <DropdownMenuItem onClick={() => handleDesktopProfileNavigation("/account/settings")}>
                       <HiCog className="w-4 h-4 mr-2" />
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      className="text-destructive"
-                    >
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                       <HiLogout className="w-4 h-4 mr-2" />
                       Logout
                     </DropdownMenuItem>

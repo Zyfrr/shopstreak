@@ -20,6 +20,7 @@ interface OrderItem {
   price: number;
   quantity: number;
   image: string;
+  total: number;
 }
 
 interface OrderAddress {
@@ -32,13 +33,22 @@ interface OrderAddress {
   SS_COUNTRY: string;
 }
 
+interface OrderSummary {
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  discount: number;
+  total: number;
+}
+
 interface Order {
   id: string;
   orderNumber: string;
   date: string;
-  total: number;
   status: string;
+  paymentStatus: string;
   items: OrderItem[];
+  summary: OrderSummary;
   tracking: TrackingStep[];
   shippingAddress: OrderAddress;
 }
@@ -116,7 +126,7 @@ export default function OrderTrackingPage() {
         title="Order Tracking"
         description="Loading order information..."
         showBackButton={true}
-        backHref="/account/order-tracking"
+        backHref="/account/orders"
       >
         <div className="flex items-center justify-center py-12">
           <HiRefresh className="w-8 h-8 animate-spin text-primary" />
@@ -136,10 +146,10 @@ export default function OrderTrackingPage() {
               The order you're looking for doesn't exist.
             </p>
             <Link
-              href="/account/order-tracking"
+              href="/account/orders"
               className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition"
             >
-              Back to Order Tracking
+              Back to Orders
             </Link>
           </div>
         </div>
@@ -152,7 +162,7 @@ export default function OrderTrackingPage() {
       title={`Order #${order.orderNumber}`}
       description="Track your order status"
       showBackButton={true}
-      backHref="/account/order-tracking"
+      backHref="/account/orders"
     >
       {/* Order Header */}
       <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
@@ -162,23 +172,34 @@ export default function OrderTrackingPage() {
             <p className="text-muted-foreground text-sm sm:text-base">
               Placed on {formatDate(order.date)}
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              <span
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm ${
+                  order.status === "delivered"
+                    ? "bg-green-100 text-green-800"
+                    : order.status === "shipped"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-yellow-100 text-yellow-800"
+                }`}
+              >
+                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+              </span>
+              <span
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-semibold text-sm ${
+                  order.paymentStatus === "paid"
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+              </span>
+            </div>
           </div>
           <div className="text-right">
-            <div
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-full font-semibold text-sm ${
-                order.status === "delivered"
-                  ? "bg-primary text-primary-foreground"
-                  : order.status === "shipped"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {order.status.charAt(0).toUpperCase() +
-                order.status.slice(1).replace("-", " ")}
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-primary mt-2">
-              ₹{order.total}
+            <p className="text-xl sm:text-2xl font-bold text-primary">
+              ₹{order.summary?.total || 0}
             </p>
+            <p className="text-sm text-muted-foreground mt-1">Total Amount</p>
           </div>
         </div>
       </div>
@@ -228,13 +249,40 @@ export default function OrderTrackingPage() {
               ))}
             </div>
           </div>
+
+          {/* Order Summary */}
+          <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mt-6">
+            <h3 className="font-bold mb-4 text-sm sm:text-base">Order Summary</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>₹{order.summary?.subtotal || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Shipping</span>
+                <span>₹{order.summary?.shipping || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tax</span>
+                <span>₹{order.summary?.tax || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="text-green-600">-₹{order.summary?.discount || 0}</span>
+              </div>
+              <div className="border-t border-border pt-2 flex justify-between font-bold text-base">
+                <span>Total</span>
+                <span className="text-primary">₹{order.summary?.total || 0}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Order Details */}
         <div className="space-y-6">
           {/* Items */}
           <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
-            <h3 className="font-bold mb-4 text-sm sm:text-base">Order Items</h3>
+            <h3 className="font-bold mb-4 text-sm sm:text-base">Order Items ({order.items.length})</h3>
             <div className="space-y-3">
               {order.items.map((item: OrderItem) => (
                 <div key={item.id} className="flex items-center gap-3">
@@ -248,10 +296,10 @@ export default function OrderTrackingPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-xs sm:text-sm line-clamp-2">{item.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Qty: {item.quantity}
+                      Qty: {item.quantity} × ₹{item.price}
                     </p>
                   </div>
-                  <p className="font-semibold text-sm sm:text-base">₹{item.price}</p>
+                  <p className="font-semibold text-sm sm:text-base">₹{item.total}</p>
                 </div>
               ))}
             </div>
