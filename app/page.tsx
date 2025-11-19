@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { ShoppingBag, PackageSearch } from "lucide-react";
 
@@ -24,99 +25,68 @@ interface Category {
   href: string;
 }
 
+// React Query fetcher with proper typing
+const fetchTrendingProducts = async (): Promise<Product[]> => {
+  const response = await fetch('/api/products?limit=4&sort=trending');
+  if (!response.ok) throw new Error('Failed to fetch products');
+  const data = await response.json();
+  return data.data;
+};
+
 export default function HomePage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
 
+  // Use React Query for data fetching with caching - FIXED VERSION
+  const { data: trendingProducts, isLoading, error } = useQuery({
+    queryKey: ['trending-products'],
+    queryFn: fetchTrendingProducts,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes (cacheTime is now gcTime)
+  });
+
+  // Static category data - no need to fetch
   useEffect(() => {
-    fetchData();
+    const categoryData: Category[] = [
+      {
+        id: "all",
+        name: "All Products",
+        icon: "🛍️",
+        href: "/product",
+      },
+      {
+        id: "Electronics",
+        name: "Electronics",
+        icon: "📱",
+        href: "/product?category=Electronics",
+      },
+      {
+        id: "Beauty",
+        name: "Beauty & Personal Care",
+        icon: "💄",
+        href: "/product?category=Beauty%20%26%20Personal%20Care",
+      },
+      {
+        id: "Accessories",
+        name: "Accessories",
+        icon: "👜",
+        href: "/product?category=Accessories",
+      },
+      {
+        id: "Home & Living",
+        name: "Home & Living",
+        icon: "🏠",
+        href: "/product?category=Home%20%26%20Living",
+      },
+      {
+        id: "Fitness",
+        name: "Fitness & Sports",
+        icon: "⚽",
+        href: "/product?category=Fitness%20%26%20Sports",
+      },
+    ];
+    setCategories(categoryData);
   }, []);
-
-  // Category mapping system - Updated to match your product categories
-  const categoryMapping = {
-    Electronics: "Electronics",
-    "Home & Living": "Home & Living",
-    Fitness: "Fitness & Sports",
-    Accessories: "Accessories",
-    Beauty: "Beauty & Personal Care",
-  };
-
-  // Helper function to create category URLs
-  const createCategoryUrl = (categoryKey: string) => {
-    const categoryValue =
-      categoryMapping[categoryKey as keyof typeof categoryMapping];
-    return `/product?category=${encodeURIComponent(categoryValue)}`;
-  };
-
-  // Handle category click with optimized navigation
-  const handleCategoryClick = (href: string) => {
-    // Use router.push for client-side navigation without reload
-    router.push(href);
-  };
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-
-      // Fetch trending products
-      const productsResponse = await fetch(
-        "/api/products?limit=4&sort=trending"
-      );
-      const productsData = await productsResponse.json();
-
-      if (productsData.success) {
-        setTrendingProducts(productsData.data);
-      }
-
-      // Home Page Category List (matching actual product categories)
-      const categoryData: Category[] = [
-        {
-          id: "all",
-          name: "All Products",
-          icon: "🛍️",
-          href: "/product",
-        },
-        {
-          id: "Electronics",
-          name: "Electronics",
-          icon: "📱",
-          href: createCategoryUrl("Electronics"),
-        },
-        {
-          id: "Beauty",
-          name: "Beauty & Personal Care",
-          icon: "💄",
-          href: createCategoryUrl("Beauty"),
-        },
-        {
-          id: "Accessories",
-          name: "Accessories",
-          icon: "👜",
-          href: createCategoryUrl("Accessories"),
-        },
-        {
-          id: "Home & Living",
-          name: "Home & Living",
-          icon: "🏠",
-          href: createCategoryUrl("Home & Living"),
-        },
-        {
-          id: "Fitness",
-          name: "Fitness & Sports",
-          icon: "⚽",
-          href: createCategoryUrl("Fitness"),
-        },
-      ];
-
-      setCategories(categoryData);
-    } catch (error) {
-      console.error("Error fetching home page data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="bg-background min-h-screen">
@@ -141,6 +111,7 @@ export default function HomePage() {
                 bg-accent text-accent-foreground
                 shadow-md hover:shadow-lg hover:scale-105 transition-all
               "
+              prefetch={true}
             >
               <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
               Start Shopping
@@ -157,6 +128,7 @@ export default function HomePage() {
                 text-foreground bg-card
                 shadow-sm hover:bg-accent/10 hover:scale-105 transition-all
               "
+              prefetch={true}
             >
               <PackageSearch className="w-4 h-4 sm:w-5 sm:h-5" />
               View Products
@@ -178,6 +150,7 @@ export default function HomePage() {
                 key={cat.id}
                 href={cat.href}
                 className="flex flex-col items-center gap-4 p-6 bg-card border border-border rounded-xl hover:border-primary hover:shadow-lg transition-all duration-300 group"
+                prefetch={true}
               >
                 <span className="text-4xl group-hover:scale-110 transition-transform duration-300">
                   {cat.icon}
@@ -199,73 +172,23 @@ export default function HomePage() {
             <Link
               href="/product"
               className="text-primary text-lg font-semibold hover:underline flex items-center gap-2"
+              prefetch={true}
             >
               View All
               <span>→</span>
             </Link>
           </div>
 
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="bg-card border border-border rounded-xl overflow-hidden animate-pulse"
-                >
-                  <div className="bg-muted h-48 w-full"></div>
-                  <div className="p-4 space-y-3">
-                    <div className="bg-muted h-4 rounded w-3/4"></div>
-                    <div className="bg-muted h-6 rounded w-1/2"></div>
-                  </div>
-                </div>
-              ))}
+          {isLoading ? (
+            <ProductGridSkeleton />
+          ) : error ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Failed to load trending products
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {trendingProducts.map((product) => (
-                <Link
-                  key={product.id}
-                  href={`/product/${product.id}`}
-                  className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300"
-                >
-                  <div className="relative bg-muted overflow-hidden h-48">
-                    <img
-                      src={product.image || "/placeholder.svg"}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
-                    />
-                    {product.badge && (
-                      <div className="absolute top-3 right-3 bg-accent text-accent-foreground text-xs font-bold px-3 py-1 rounded-full">
-                        {product.badge === "trending" && "🔥 Trending"}
-                        {product.badge === "bestseller" && "⭐ Bestseller"}
-                        {product.badge === "featured" && "✨ Featured"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-semibold line-clamp-2 mb-2 group-hover:text-primary transition-colors text-sm">
-                      {product.name}
-                    </h3>
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <span className="text-xl font-bold text-primary block">
-                          ₹{product.price}
-                        </span>
-                        {product.originalPrice && (
-                          <span className="text-sm text-muted-foreground line-through">
-                            ₹{product.originalPrice}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm">
-                        <span>⭐</span>
-                        <span className="text-muted-foreground">
-                          {product.rating}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
+              {trendingProducts?.map((product) => (
+                <ProductCard key={product.id} product={product} />
               ))}
             </div>
           )}
@@ -301,6 +224,84 @@ export default function HomePage() {
       </section>
 
       <BottomNav />
+    </div>
+  );
+}
+
+// Optimized Product Card Component
+function ProductCard({ product }: { product: Product }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  return (
+    <Link
+      href={`/product/${product.id}`}
+      className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300"
+      prefetch={true}
+    >
+      <div className="relative bg-muted overflow-hidden h-48">
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-r from-gray-200 to-gray-300 animate-pulse" />
+        )}
+        <img
+          src={product.image || "/placeholder.svg"}
+          alt={product.name}
+          className={`w-full h-full object-cover transition duration-300 ${
+            imageLoaded ? 'group-hover:scale-110' : 'opacity-0'
+          }`}
+          onLoad={() => setImageLoaded(true)}
+          loading="lazy"
+        />
+        {product.badge && (
+          <div className="absolute top-3 right-3 bg-accent text-accent-foreground text-xs font-bold px-3 py-1 rounded-full">
+            {product.badge === "trending" && "🔥 Trending"}
+            {product.badge === "bestseller" && "⭐ Bestseller"}
+            {product.badge === "featured" && "✨ Featured"}
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <h3 className="font-semibold line-clamp-2 mb-2 group-hover:text-primary transition-colors text-sm">
+          {product.name}
+        </h3>
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-xl font-bold text-primary block">
+              ₹{product.price}
+            </span>
+            {product.originalPrice && (
+              <span className="text-sm text-muted-foreground line-through">
+                ₹{product.originalPrice}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-sm">
+            <span>⭐</span>
+            <span className="text-muted-foreground">
+              {product.rating}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// Skeleton Loader
+function ProductGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className="bg-card border border-border rounded-xl overflow-hidden animate-pulse"
+        >
+          <div className="bg-muted h-48 w-full"></div>
+          <div className="p-4 space-y-3">
+            <div className="bg-muted h-4 rounded w-3/4"></div>
+            <div className="bg-muted h-6 rounded w-1/2"></div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

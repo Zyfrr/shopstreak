@@ -1,8 +1,8 @@
-// app/product/page.tsx
 "use client";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   ShoppingCart,
   Filter,
@@ -12,7 +12,6 @@ import {
   Heart,
   Star,
   Sparkles,
-  Check,
 } from "lucide-react";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { useCart } from "@/components/contexts/cart-context";
@@ -40,7 +39,6 @@ interface Product {
   highlights?: string[];
 }
 
-// Filter types
 interface FilterState {
   categories: string[];
   priceRange: [number, number];
@@ -49,6 +47,17 @@ interface FilterState {
   inStock: boolean;
   discounts: string[];
 }
+
+// React Query fetcher with proper typing
+const fetchProducts = async (params: URLSearchParams): Promise<{
+  data: Product[];
+  pagination: any;
+}> => {
+  const response = await fetch(`/api/products?${params.toString()}`);
+  if (!response.ok) throw new Error('Failed to fetch products');
+  const data = await response.json();
+  return data;
+};
 
 // Sort options
 const SORT_OPTIONS = [
@@ -81,9 +90,6 @@ export default function ProductsPage() {
   const { isAuthenticated } = useAuth();
   const { addToast } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"filters" | "sort">("filters");
   const [wishlistItems, setWishlistItems] = useState<string[]>([]);
@@ -101,36 +107,56 @@ export default function ProductsPage() {
 
   const [sortBy, setSortBy] = useState("popular");
   const [searchQuery, setSearchQuery] = useState("");
-  const [availableBrands, setAvailableBrands] = useState<string[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  // Fetch wishlist items
-  const fetchWishlist = useCallback(async () => {
-    if (!isAuthenticated) {
-      setWishlistItems([]);
-      return;
+  // Build query parameters for React Query
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    
+    // Add search query
+    if (searchQuery) params.append("q", searchQuery);
+
+    // Add filters
+    if (filters.priceRange[0] > 0) params.append("minPrice", filters.priceRange[0].toString());
+    if (filters.priceRange[1] < 50000) params.append("maxPrice", filters.priceRange[1].toString());
+    if (filters.minRating > 0) params.append("rating", filters.minRating.toString());
+    if (filters.inStock) params.append("inStock", "true");
+    if (filters.categories.length > 0) params.append("category", filters.categories[0]); // Take first category only
+    if (filters.brands.length > 0) params.append("brand", filters.brands.join(','));
+
+    // Add sort
+    const sortOption = SORT_OPTIONS.find((opt) => opt.id === sortBy);
+    let apiSort = "popular";
+    switch (sortOption?.id) {
+      case "price-low": apiSort = "price_asc"; break;
+      case "price-high": apiSort = "price_desc"; break;
+      case "rating": apiSort = "rating"; break;
+      case "newest": apiSort = "newest"; break;
+      case "discount": apiSort = "discount"; break;
+      default: apiSort = "popular";
     }
+    params.append("sort", apiSort);
+    params.append("limit", "20");
 
-    try {
-      const token = localStorage.getItem("accessToken");
-      const response = await fetch("/api/wishlist", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    return params;
+  }, [searchQuery, filters, sortBy]);
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          const wishlistIds =
-            result.data.items?.map((item: any) => item.id) || [];
-          setWishlistItems(wishlistIds);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching wishlist:", error);
-    }
-  }, [isAuthenticated]);
+  // React Query for products - FIXED VERSION
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['products', queryParams.toString()],
+    queryFn: () => fetchProducts(queryParams),
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes (cacheTime is now gcTime)
+  });
+
+  const products = data?.data || [];
+  const pagination = data?.pagination;
+
+  // Extract available brands and categories
+  const { availableBrands, availableCategories } = useMemo(() => {
+    const brands = [...new Set(products.map((p) => p.brand).filter(Boolean))] as string[];
+    const categories = [...new Set(products.map((p) => p.category))] as string[];
+    return { availableBrands: brands, availableCategories: categories };
+  }, [products]);
 
   // Initialize from URL params
   useEffect(() => {
@@ -155,229 +181,105 @@ export default function ProductsPage() {
     if (rating) {
       setFilters((prev) => ({ ...prev, minRating: Number(rating) }));
     }
+  }, [searchParams]);
 
-    fetchProducts();
-    fetchWishlist();
-  }, [searchParams, fetchWishlist]);
+  // Fetch wishlist
+  const fetchWishlist = useCallback(async () => {
+    if (!isAuthenticated) {
+      setWishlistItems([]);
+      return;
+    }
 
-  // Fetch products with optimized API call
-  const fetchProducts = useCallback(async () => {
     try {
-      setLoading(true);
+      const token = localStorage.getItem("accessToken");
+      const response = await fetch("/api/wishlist", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      const params = new URLSearchParams();
-      if (searchQuery) params.append("q", searchQuery);
-
-      // Add filters to API call
-      if (filters.priceRange[0] > 0)
-        params.append("minPrice", filters.priceRange[0].toString());
-      if (filters.priceRange[1] < 50000)
-        params.append("maxPrice", filters.priceRange[1].toString());
-      if (filters.minRating > 0)
-        params.append("rating", filters.minRating.toString());
-      if (filters.inStock) params.append("inStock", "true");
-
-      // Map frontend sort to API sort
-      const sortOption = SORT_OPTIONS.find((opt) => opt.id === sortBy);
-      if (sortOption) {
-        let apiSort = "popular";
-        switch (sortOption.id) {
-          case "price-low":
-            apiSort = "price_asc";
-            break;
-          case "price-high":
-            apiSort = "price_desc";
-            break;
-          case "rating":
-            apiSort = "rating";
-            break;
-          case "newest":
-            apiSort = "newest";
-            break;
-          case "discount":
-            apiSort = "discount";
-            break;
-          default:
-            apiSort = "popular";
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const wishlistIds = result.data.items?.map((item: any) => item.id) || [];
+          setWishlistItems(wishlistIds);
         }
-        params.append("sort", apiSort);
-      }
-
-      const response = await fetch(`/api/products?${params.toString()}`);
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        const productsData = data.data;
-        setAllProducts(productsData);
-        setProducts(productsData);
-
-        // Extract available brands and categories
-        const brands = [
-          ...new Set(productsData.map((p) => p.brand).filter(Boolean)),
-        ] as string[];
-        const categories = [
-          ...new Set(productsData.map((p) => p.category)),
-        ] as string[];
-        setAvailableBrands(brands);
-        setAvailableCategories(categories);
-      } else {
-        setProducts(getFallbackProducts());
-        setAllProducts(getFallbackProducts());
       }
     } catch (error) {
-      console.error("Error fetching products:", error);
-      const fallbackProducts = getFallbackProducts();
-      setProducts(fallbackProducts);
-      setAllProducts(fallbackProducts);
-    } finally {
-      setLoading(false);
+      console.error("Error fetching wishlist:", error);
     }
-  }, [searchQuery, filters, sortBy]);
+  }, [isAuthenticated]);
 
-  // Apply filters locally for better performance
-  const filteredProducts = useMemo(() => {
-    let filtered = [...allProducts];
-
-    // Category filter
-    if (filters.categories.length > 0) {
-      filtered = filtered.filter((product) =>
-        filters.categories.includes(product.category)
-      );
-    }
-
-    // Brand filter
-    if (filters.brands.length > 0) {
-      filtered = filtered.filter(
-        (product) => product.brand && filters.brands.includes(product.brand)
-      );
-    }
-
-    // Price range filter
-    filtered = filtered.filter(
-      (product) =>
-        product.price >= filters.priceRange[0] &&
-        product.price <= filters.priceRange[1]
-    );
-
-    // Rating filter
-    if (filters.minRating > 0) {
-      filtered = filtered.filter(
-        (product) => product.rating >= filters.minRating
-      );
-    }
-
-    // Stock filter
-    if (filters.inStock) {
-      filtered = filtered.filter((product) => product.stock > 0);
-    }
-
-    // Discount filter
-    if (filters.discounts.length > 0) {
-      filtered = filtered.filter((product) => {
-        const discount = product.discountPercentage || 0;
-        return filters.discounts.some((discountId) => {
-          const range = DISCOUNT_RANGES.find((d) => d.id === discountId);
-          return range && discount >= range.min;
-        });
-      });
-    }
-
-    // Apply sorting
-    const sortOption = SORT_OPTIONS.find((opt) => opt.id === sortBy);
-    if (sortOption) {
-      filtered.sort((a, b) => {
-        let aValue = a[sortOption.field as keyof Product] as number;
-        let bValue = b[sortOption.field as keyof Product] as number;
-
-        // Fallback for fields that might not exist
-        if (aValue === undefined) aValue = 0;
-        if (bValue === undefined) bValue = 0;
-
-        return (aValue - bValue) * sortOption.order;
-      });
-    }
-
-    return filtered;
-  }, [allProducts, filters, sortBy]);
-
-  // Update products when filters change
   useEffect(() => {
-    setProducts(filteredProducts);
-  }, [filteredProducts]);
+    fetchWishlist();
+  }, [fetchWishlist]);
 
-const handleWishlistToggle = async (product: Product) => {
-  if (!isAuthenticated) {
-    router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);
-    return;
-  }
-
-  setWishlistLoading(product.id);
-  try {
-    const token = localStorage.getItem("accessToken");
-
-    if (wishlistItems.includes(product.id)) {
-      // Remove from wishlist
-      const response = await fetch(`/api/wishlist?productId=${product.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        const newWishlist = wishlistItems.filter((id) => id !== product.id);
-        setWishlistItems(newWishlist);
-        // Update header wishlist count immediately
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
-        }
-        addToast({
-          type: "success",
-          title: "Removed from wishlist",
-          message: `${product.name} has been removed from your wishlist`,
-          duration: 3000,
-        });
-      }
-    } else {
-      // Add to wishlist
-      const response = await fetch("/api/wishlist", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ productId: product.id }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        const newWishlist = [...wishlistItems, product.id];
-        setWishlistItems(newWishlist);
-        // Update header wishlist count immediately
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
-        }
-        addToast({
-          type: "success",
-          title: "Added to wishlist",
-          message: `${product.name} has been added to your wishlist`,
-          duration: 3000,
-        });
-      }
+  const handleWishlistToggle = async (product: Product) => {
+    if (!isAuthenticated) {
+      router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);
+      return;
     }
-  } catch (error: any) {
-    console.error("Error updating wishlist:", error);
-    addToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to update wishlist",
-      duration: 5000,
-    });
-  } finally {
-    setWishlistLoading(null);
-  }
-};
+
+    setWishlistLoading(product.id);
+    try {
+      const token = localStorage.getItem("accessToken");
+
+      if (wishlistItems.includes(product.id)) {
+        // Remove from wishlist
+        const response = await fetch(`/api/wishlist?productId=${product.id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          setWishlistItems(prev => prev.filter((id) => id !== product.id));
+          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
+          addToast({
+            type: "success",
+            title: "Removed from wishlist",
+            message: `${product.name} has been removed from your wishlist`,
+            duration: 3000,
+          });
+        }
+      } else {
+        // Add to wishlist
+        const response = await fetch("/api/wishlist", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ productId: product.id }),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          setWishlistItems(prev => [...prev, product.id]);
+          window.dispatchEvent(new CustomEvent('wishlistUpdated'));
+          addToast({
+            type: "success",
+            title: "Added to wishlist",
+            message: `${product.name} has been added to your wishlist`,
+            duration: 3000,
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error updating wishlist:", error);
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to update wishlist",
+        duration: 5000,
+      });
+    } finally {
+      setWishlistLoading(null);
+    }
+  };
+
   const handleAddToCart = async (product: Product) => {
     if (!isAuthenticated) {
       router.push(`/auth/login?redirect=${encodeURIComponent("/product")}`);
@@ -449,107 +351,21 @@ const handleWishlistToggle = async (product: Product) => {
     (filters.inStock ? 1 : 0) +
     (searchQuery.length > 0 ? 1 : 0);
 
-  // Fallback products
-  const getFallbackProducts = (): Product[] => [
-    {
-      id: "1",
-      name: "Wireless Bluetooth Headphones with Noise Cancellation",
-      price: 2999,
-      originalPrice: 3999,
-      image:
-        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop",
-      images: [
-        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop",
-      ],
-      rating: 4.5,
-      reviews: 128,
-      stock: 25,
-      category: "Electronics",
-      badge: "trending",
-      noReturn: false,
-      discountPercentage: 25,
-      brand: "Sony",
-      soldCount: 150,
-    },
-    {
-      id: "2",
-      name: "Smart Fitness Watch with Heart Rate Monitor",
-      price: 5999,
-      originalPrice: 7999,
-      image:
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=500&fit=crop",
-      images: [
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=500&fit=crop",
-      ],
-      rating: 4.3,
-      reviews: 89,
-      stock: 15,
-      category: "Electronics",
-      badge: "bestseller",
-      noReturn: true,
-      discountPercentage: 25,
-      brand: "FitPro",
-      soldCount: 200,
-    },
-    {
-      id: "3",
-      name: "Organic Cotton T-Shirt - Pack of 3",
-      price: 1299,
-      originalPrice: 1999,
-      image:
-        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=500&h=500&fit=crop",
-      images: [
-        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=500&h=500&fit=crop",
-      ],
-      rating: 4.2,
-      reviews: 56,
-      stock: 50,
-      category: "Fashion",
-      badge: "popular",
-      noReturn: false,
-      discountPercentage: 35,
-      brand: "EcoWear",
-      soldCount: 300,
-    },
-    {
-      id: "4",
-      name: "Stainless Steel Water Bottle - 1L",
-      price: 799,
-      originalPrice: 999,
-      image:
-        "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=500&h=500&fit=crop",
-      images: [
-        "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=500&h=500&fit=crop",
-      ],
-      rating: 4.7,
-      reviews: 203,
-      stock: 0,
-      category: "Home & Living",
-      badge: "featured",
-      noReturn: true,
-      discountPercentage: 20,
-      brand: "HydroFlask",
-      soldCount: 450,
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Enhanced Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            {/* Page Title */}
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-foreground">Products</h1>
-              {!loading && (
+              {!isLoading && (
                 <span className="text-sm text-muted-foreground hidden sm:inline">
                   ({products.length} items found)
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Mobile Filter/Sort Button */}
               <div className="lg:hidden flex items-center gap-2">
                 <button
                   onClick={() => setFilterOpen(true)}
@@ -565,9 +381,7 @@ const handleWishlistToggle = async (product: Product) => {
                 </button>
               </div>
 
-              {/* Desktop Controls */}
               <div className="hidden lg:flex items-center gap-3">
-                {/* Sort Dropdown */}
                 <div className="relative">
                   <select
                     value={sortBy}
@@ -583,7 +397,6 @@ const handleWishlistToggle = async (product: Product) => {
                   <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </div>
 
-                {/* Filter Button */}
                 <button
                   onClick={() => setFilterOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
@@ -606,7 +419,6 @@ const handleWishlistToggle = async (product: Product) => {
               <span className="text-xs text-muted-foreground">
                 Active filters:
               </span>
-
               {filters.categories.map((category) => (
                 <FilterChip
                   key={category}
@@ -619,7 +431,6 @@ const handleWishlistToggle = async (product: Product) => {
                   }
                 />
               ))}
-
               {filters.brands.map((brand) => (
                 <FilterChip
                   key={brand}
@@ -632,28 +443,24 @@ const handleWishlistToggle = async (product: Product) => {
                   }
                 />
               ))}
-
               {(filters.priceRange[0] > 0 || filters.priceRange[1] < 50000) && (
                 <FilterChip
                   label={`₹${filters.priceRange[0]} - ₹${filters.priceRange[1]}`}
                   onRemove={() => updateFilter("priceRange", [0, 50000])}
                 />
               )}
-
               {filters.minRating > 0 && (
                 <FilterChip
                   label={`${filters.minRating}+ Stars`}
                   onRemove={() => updateFilter("minRating", 0)}
                 />
               )}
-
               {filters.inStock && (
                 <FilterChip
                   label="In Stock"
                   onRemove={() => updateFilter("inStock", false)}
                 />
               )}
-
               {filters.discounts.map((discountId) => {
                 const discount = DISCOUNT_RANGES.find(
                   (d) => d.id === discountId
@@ -671,7 +478,6 @@ const handleWishlistToggle = async (product: Product) => {
                   />
                 ) : null;
               })}
-
               <button
                 onClick={clearFilters}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
@@ -683,48 +489,20 @@ const handleWishlistToggle = async (product: Product) => {
         </div>
       </header>
 
-      {/* Mobile Filter & Sort Overlay */}
-      {filterOpen && (
-        <MobileFilterOverlay
-          isOpen={filterOpen}
-          onClose={() => setFilterOpen(false)}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          filters={filters}
-          onFilterChange={updateFilter}
-          onToggleArrayFilter={toggleArrayFilter}
-          sortBy={sortBy}
-          onSortChange={setSortBy}
-          availableBrands={availableBrands}
-          availableCategories={availableCategories}
-          onApply={() => setFilterOpen(false)}
-        />
-      )}
-
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6">
-          {/* Desktop Sidebar */}
-          <DesktopFilterSidebar
-            filters={filters}
-            onFilterChange={updateFilter}
-            onToggleArrayFilter={toggleArrayFilter}
-            availableBrands={availableBrands}
-            availableCategories={availableCategories}
-            onClearFilters={clearFilters}
-            activeFilterCount={activeFilterCount}
-          />
-
           {/* Products Grid */}
           <div className="flex-1">
-            {/* Results Info */}
             <div className="mb-6 flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {loading
+                {isLoading
                   ? "Loading products..."
-                  : `Showing ${products.length} of ${allProducts.length} products`}
+                  : error
+                  ? "Error loading products"
+                  : `Showing ${products.length} products`}
               </p>
-              {!loading && products.length > 0 && (
+              {!isLoading && products.length > 0 && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>Sorted by:</span>
                   <span className="font-medium text-foreground">
@@ -734,9 +512,24 @@ const handleWishlistToggle = async (product: Product) => {
               )}
             </div>
 
-            {/* Product Grid */}
-            {loading ? (
+            {isLoading ? (
               <ProductGridSkeleton />
+            ) : error ? (
+              <div className="text-center py-16">
+                <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-12 h-12 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Error Loading Products</h3>
+                <p className="text-muted-foreground mb-6">
+                  Failed to load products. Please try again.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition"
+                >
+                  Retry
+                </button>
+              </div>
             ) : products.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {products.map((product) => (
@@ -783,458 +576,7 @@ function FilterChip({
   );
 }
 
-// Mobile Filter Overlay Component
-function MobileFilterOverlay({
-  isOpen,
-  onClose,
-  activeTab,
-  onTabChange,
-  filters,
-  onFilterChange,
-  onToggleArrayFilter,
-  sortBy,
-  onSortChange,
-  availableBrands,
-  availableCategories,
-  onApply,
-}: any) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 lg:hidden" onClick={onClose}>
-      <div
-        className="absolute bottom-0 left-0 right-0 bg-card border-t border-border rounded-t-2xl overflow-hidden max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="text-lg font-semibold">Filter & Sort</h3>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-muted rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="border-b border-border">
-          <div className="flex">
-            <button
-              onClick={() => onTabChange("filters")}
-              className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
-                activeTab === "filters"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-muted-foreground border-b border-border"
-              }`}
-            >
-              Filters
-            </button>
-            <button
-              onClick={() => onTabChange("sort")}
-              className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
-                activeTab === "sort"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-muted-foreground border-b border-border"
-              }`}
-            >
-              Sort
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === "filters" ? (
-            <div className="p-4 space-y-6">
-              {/* Categories */}
-              <FilterSection title="Categories">
-                <div className="space-y-2">
-                  {availableCategories.map((category: string) => (
-                    <label
-                      key={category}
-                      className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.categories.includes(category)}
-                        onChange={() =>
-                          onToggleArrayFilter("categories", category)
-                        }
-                        className="rounded border-border text-primary focus:ring-primary"
-                      />
-                      <span>{category}</span>
-                    </label>
-                  ))}
-                </div>
-              </FilterSection>
-
-              {/* Brands */}
-              {availableBrands.length > 0 && (
-                <FilterSection title="Brands">
-                  <div className="space-y-2">
-                    {availableBrands.map((brand: string) => (
-                      <label
-                        key={brand}
-                        className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filters.brands.includes(brand)}
-                          onChange={() => onToggleArrayFilter("brands", brand)}
-                          className="rounded border-border text-primary focus:ring-primary"
-                        />
-                        <span>{brand}</span>
-                      </label>
-                    ))}
-                  </div>
-                </FilterSection>
-              )}
-
-              {/* Price Range */}
-              <FilterSection title="Price Range">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Min: ₹{filters.priceRange[0]}
-                    </span>
-                    <span className="text-muted-foreground">
-                      Max: ₹{filters.priceRange[1]}
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    <input
-                      type="range"
-                      min="0"
-                      max="50000"
-                      step="100"
-                      value={filters.priceRange[0]}
-                      onChange={(e) =>
-                        onFilterChange("priceRange", [
-                          Number(e.target.value),
-                          filters.priceRange[1],
-                        ])
-                      }
-                      className="w-full accent-primary"
-                    />
-                    <input
-                      type="range"
-                      min="0"
-                      max="50000"
-                      step="100"
-                      value={filters.priceRange[1]}
-                      onChange={(e) =>
-                        onFilterChange("priceRange", [
-                          filters.priceRange[0],
-                          Number(e.target.value),
-                        ])
-                      }
-                      className="w-full accent-primary"
-                    />
-                  </div>
-                </div>
-              </FilterSection>
-
-              {/* Rating */}
-              <FilterSection title="Minimum Rating">
-                <div className="space-y-2">
-                  {[4, 3, 2, 1, 0].map((rating) => (
-                    <label
-                      key={rating}
-                      className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-                    >
-                      <input
-                        type="radio"
-                        name="rating"
-                        checked={filters.minRating === rating}
-                        onChange={() => onFilterChange("minRating", rating)}
-                        className="accent-primary"
-                      />
-                      <span className="flex items-center gap-2">
-                        {rating === 0 ? (
-                          "Any Rating"
-                        ) : (
-                          <>
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span>{rating}+ Stars</span>
-                          </>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </FilterSection>
-
-              {/* Discount */}
-              <FilterSection title="Discount">
-                <div className="space-y-2">
-                  {DISCOUNT_RANGES.map((range) => (
-                    <label
-                      key={range.id}
-                      className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.discounts.includes(range.id)}
-                        onChange={() =>
-                          onToggleArrayFilter("discounts", range.id)
-                        }
-                        className="rounded border-border text-primary focus:ring-primary"
-                      />
-                      <span>{range.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </FilterSection>
-
-              {/* In Stock */}
-              <FilterSection title="Availability">
-                <label className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted">
-                  <input
-                    type="checkbox"
-                    checked={filters.inStock}
-                    onChange={(e) =>
-                      onFilterChange("inStock", e.target.checked)
-                    }
-                    className="rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>In Stock Only</span>
-                </label>
-              </FilterSection>
-            </div>
-          ) : (
-            // Sort Tab Content
-            <div className="p-4 space-y-2">
-              {SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  onClick={() => onSortChange(option.id)}
-                  className={`w-full text-left px-3 py-3 rounded-lg transition-all text-sm ${
-                    sortBy === option.id
-                      ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                      : "hover:bg-muted"
-                  }`}
-                >
-                  {option.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Apply Button */}
-        <div className="p-4 border-t border-border">
-          <button
-            onClick={onApply}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-          >
-            Apply Filters
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Desktop Filter Sidebar Component
-function DesktopFilterSidebar({
-  filters,
-  onFilterChange,
-  onToggleArrayFilter,
-  availableBrands,
-  availableCategories,
-  onClearFilters,
-  activeFilterCount,
-}: any) {
-  return (
-    <aside className="hidden lg:block w-80 flex-shrink-0">
-      <div className="bg-card border border-border rounded-xl p-6 space-y-6 sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-lg">Filters</h3>
-          {activeFilterCount > 0 && (
-            <button
-              onClick={onClearFilters}
-              className="text-primary text-sm font-medium hover:underline"
-            >
-              Clear all
-            </button>
-          )}
-        </div>
-
-        {/* Categories */}
-        <FilterSection title="Categories">
-          <div className="space-y-2">
-            {availableCategories.map((category: string) => (
-              <label
-                key={category}
-                className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.categories.includes(category)}
-                  onChange={() => onToggleArrayFilter("categories", category)}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <span>{category}</span>
-              </label>
-            ))}
-          </div>
-        </FilterSection>
-
-        {/* Brands */}
-        {availableBrands.length > 0 && (
-          <FilterSection title="Brands">
-            <div className="space-y-2">
-              {availableBrands.map((brand: string) => (
-                <label
-                  key={brand}
-                  className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-                >
-                  <input
-                    type="checkbox"
-                    checked={filters.brands.includes(brand)}
-                    onChange={() => onToggleArrayFilter("brands", brand)}
-                    className="rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>{brand}</span>
-                </label>
-              ))}
-            </div>
-          </FilterSection>
-        )}
-
-        {/* Price Range */}
-        <FilterSection title="Price Range">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <span>₹{filters.priceRange[0]}</span>
-              <span>₹{filters.priceRange[1]}</span>
-            </div>
-            <div className="space-y-3">
-              <input
-                type="range"
-                min="0"
-                max="50000"
-                step="100"
-                value={filters.priceRange[0]}
-                onChange={(e) =>
-                  onFilterChange("priceRange", [
-                    Number(e.target.value),
-                    filters.priceRange[1],
-                  ])
-                }
-                className="w-full accent-primary"
-              />
-              <input
-                type="range"
-                min="0"
-                max="50000"
-                step="100"
-                value={filters.priceRange[1]}
-                onChange={(e) =>
-                  onFilterChange("priceRange", [
-                    filters.priceRange[0],
-                    Number(e.target.value),
-                  ])
-                }
-                className="w-full accent-primary"
-              />
-            </div>
-          </div>
-        </FilterSection>
-
-        {/* Rating */}
-        <FilterSection title="Customer Rating">
-          <div className="space-y-2">
-            {[4, 3, 2, 1, 0].map((rating) => (
-              <label
-                key={rating}
-                className="flex items-center gap-3 cursor-pointer text-sm hover:bg-muted p-2 rounded transition"
-              >
-                <input
-                  type="radio"
-                  name="rating"
-                  checked={filters.minRating === rating}
-                  onChange={() => onFilterChange("minRating", rating)}
-                  className="accent-primary"
-                />
-                <span className="flex items-center gap-1">
-                  {rating === 0 ? (
-                    "Any Rating"
-                  ) : (
-                    <>
-                      {Array.from({ length: rating }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className="w-4 h-4 text-yellow-500 fill-current"
-                        />
-                      ))}
-                      <span className="text-muted-foreground ml-1">
-                        & above
-                      </span>
-                    </>
-                  )}
-                </span>
-              </label>
-            ))}
-          </div>
-        </FilterSection>
-
-        {/* Discount */}
-        <FilterSection title="Discount">
-          <div className="space-y-2">
-            {DISCOUNT_RANGES.map((range) => (
-              <label
-                key={range.id}
-                className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted"
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.discounts.includes(range.id)}
-                  onChange={() => onToggleArrayFilter("discounts", range.id)}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <span>{range.name}</span>
-              </label>
-            ))}
-          </div>
-        </FilterSection>
-
-        {/* In Stock */}
-        <FilterSection title="Availability">
-          <label className="flex items-center gap-3 cursor-pointer text-sm p-2 rounded-lg transition-colors hover:bg-muted">
-            <input
-              type="checkbox"
-              checked={filters.inStock}
-              onChange={(e) => onFilterChange("inStock", e.target.checked)}
-              className="rounded border-border text-primary focus:ring-primary"
-            />
-            <span>In Stock Only</span>
-          </label>
-        </FilterSection>
-      </div>
-    </aside>
-  );
-}
-
-// Filter Section Component
-function FilterSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <h4 className="font-semibold mb-3 text-sm text-foreground">{title}</h4>
-      {children}
-    </div>
-  );
-}
-
-// Product Card Component with Wishlist
+// Product Card Component
 function ProductCard({
   product,
   onAddToCart,
@@ -1292,6 +634,7 @@ function ProductCard({
             }`}
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
+            loading="lazy"
           />
 
           {/* Badges */}
