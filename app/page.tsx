@@ -1,13 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import {
-  ShoppingBag,
-  PackageSearch,
-  AppWindow,
-  SearchCheck,
-} from "lucide-react";
+import { ShoppingBag, PackageSearch } from "lucide-react";
 
 interface Product {
   id: string;
@@ -29,6 +25,7 @@ interface Category {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,13 +34,12 @@ export default function HomePage() {
     fetchData();
   }, []);
 
-  // Category mapping system
+  // Category mapping system - Updated to match your product categories
   const categoryMapping = {
     Electronics: "Electronics",
     "Home & Living": "Home & Living",
     Fitness: "Fitness & Sports",
     Accessories: "Accessories",
-    Kitchen: "Kitchen & Dining",
     Beauty: "Beauty & Personal Care",
   };
 
@@ -52,6 +48,12 @@ export default function HomePage() {
     const categoryValue =
       categoryMapping[categoryKey as keyof typeof categoryMapping];
     return `/product?category=${encodeURIComponent(categoryValue)}`;
+  };
+
+  // Handle category click with optimized navigation
+  const handleCategoryClick = (href: string) => {
+    // Use router.push for client-side navigation without reload
+    router.push(href);
   };
 
   const fetchData = async () => {
@@ -68,7 +70,7 @@ export default function HomePage() {
         setTrendingProducts(productsData.data);
       }
 
-      // Home Page Category List (matching Header category URLs)
+      // Home Page Category List (matching actual product categories)
       const categoryData: Category[] = [
         {
           id: "all",
@@ -76,35 +78,30 @@ export default function HomePage() {
           icon: "🛍️",
           href: "/product",
         },
-
         {
           id: "Electronics",
           name: "Electronics",
           icon: "📱",
           href: createCategoryUrl("Electronics"),
         },
-
         {
           id: "Beauty",
           name: "Beauty & Personal Care",
           icon: "💄",
           href: createCategoryUrl("Beauty"),
         },
-
         {
           id: "Accessories",
           name: "Accessories",
           icon: "👜",
           href: createCategoryUrl("Accessories"),
         },
-
         {
           id: "Home & Living",
           name: "Home & Living",
           icon: "🏠",
           href: createCategoryUrl("Home & Living"),
         },
-
         {
           id: "Fitness",
           name: "Fitness & Sports",
@@ -123,66 +120,58 @@ export default function HomePage() {
 
   return (
     <div className="bg-background min-h-screen">
+      {/* Hero Section */}
       <section className="w-full py-14 px-4 bg-gradient-to-b from-accent/10 via-background to-background">
         <div className="max-w-4xl mx-auto text-center">
-          {/* Heading */}
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
             Welcome to <span className="text-accent">ShopStreak!</span>
           </h1>
-
-          {/* Subheading */}
           <p className="text-sm sm:text-base md:text-lg text-muted-foreground mt-3 mb-8 max-w-xl mx-auto">
             Discover amazing products with fast delivery and great prices.
           </p>
-
-          {/* Buttons Row */}
           <div className="flex flex-row justify-center items-center gap-4 mt-4">
-            {/* Primary Button */}
             <Link
               href="/product"
               className="
-          px-5 py-3 
-          sm:px-6 sm:py-3 
-          rounded-xl font-semibold 
-          text-sm sm:text-base        /* Bigger text on desktop */
-          flex items-center gap-2
-          bg-accent text-accent-foreground
-          shadow-md hover:shadow-lg hover:scale-105 transition-all
-        "
+                px-5 py-3 
+                sm:px-6 sm:py-3 
+                rounded-xl font-semibold 
+                text-sm sm:text-base
+                flex items-center gap-2
+                bg-accent text-accent-foreground
+                shadow-md hover:shadow-lg hover:scale-105 transition-all
+              "
             >
-              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />{" "}
-              {/* Bigger icon on desktop */}
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
               Start Shopping
             </Link>
-
-            {/* Secondary Button */}
             <Link
               href="/product"
               className="
-          px-5 py-3 
-          sm:px-6 sm:py-3 
-          rounded-xl font-semibold 
-          text-sm sm:text-base        /* Bigger text on desktop */
-          flex items-center gap-2
-          border border-border 
-          text-foreground bg-card
-          shadow-sm hover:bg-accent/10 hover:scale-105 transition-all
-        "
+                px-5 py-3 
+                sm:px-6 sm:py-3 
+                rounded-xl font-semibold 
+                text-sm sm:text-base
+                flex items-center gap-2
+                border border-border 
+                text-foreground bg-card
+                shadow-sm hover:bg-accent/10 hover:scale-105 transition-all
+              "
             >
-              <PackageSearch className="w-4 h-4 sm:w-5 sm:h-5" />{" "}
-              {/* Bigger icon on desktop */}
+              <PackageSearch className="w-4 h-4 sm:w-5 sm:h-5" />
               View Products
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Categories */}
+      {/* Categories Section */}
       <section className="py-12 px-4">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-8">
             Shop by Category
           </h2>
+
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {categories.map((cat) => (
               <Link
@@ -202,7 +191,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Trending Products */}
+      {/* Trending Products Section */}
       <section className="py-12 px-4 bg-muted/30">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">

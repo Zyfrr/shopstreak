@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import SS_Product from '@/models/SS_Product';
-import SS_Category from '@/models/SS_Category'; // Import the Category model
+import SS_Category from '@/models/SS_Category';
 
 export async function GET(request) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request) {
     
     // Extract query parameters
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '25');
+    const limit = parseInt(searchParams.get('limit') || '30'); // Increased to 20
     const searchQuery = searchParams.get('q') || '';
     const category = searchParams.get('category') || '';
     const subCategory = searchParams.get('subCategory') || '';
@@ -34,26 +34,31 @@ export async function GET(request) {
       filter['SS_CUSTOMER_VISIBLE.SS_AVERAGE_RATING'] = { $gte: minRating };
     }
 
-    // ENHANCED CATEGORY FILTER - Handle both ObjectId and category name
+    // IMPROVED CATEGORY FILTER - Handle category names properly
     if (category && category !== 'all') {
       const decodedCategory = decodeURIComponent(category);
       console.log('🔍 Decoded Category:', decodedCategory);
       
-      // Check if it's a valid ObjectId (24 character hex string)
-      const isObjectId = /^[0-9a-fA-F]{24}$/.test(decodedCategory);
+      // First try to find category by name
+      const categories = await SS_Category.find({
+        SS_CATEGORY_NAME: { 
+          $regex: decodedCategory.replace(/[-&]/g, '.*'), 
+          $options: 'i' 
+        }
+      }).select('_id');
       
-      if (isObjectId) {
+      if (categories.length > 0) {
         // Filter by category ObjectId
-        filter['SS_ADMIN_VISIBLE.SS_CATEGORY'] = decodedCategory;
-      } else {
-        // Filter by category name using aggregation lookup
-        // We'll handle this differently since we can't populate in the initial query
-        const categories = await SS_Category.find({
-          SS_CATEGORY_NAME: { $regex: decodedCategory, $options: 'i' }
-        }).select('_id');
-        
         const categoryIds = categories.map(cat => cat._id);
         filter['SS_ADMIN_VISIBLE.SS_CATEGORY'] = { $in: categoryIds };
+        console.log('🔍 Filtering by category IDs:', categoryIds);
+      } else {
+        // If no category found, try direct name matching as fallback
+        console.log('🔍 No category found, trying direct name matching');
+        filter['SS_ADMIN_VISIBLE.SS_CATEGORY_NAME'] = { 
+          $regex: decodedCategory, 
+          $options: 'i' 
+        };
       }
     }
 
@@ -115,7 +120,7 @@ export async function GET(request) {
       { $match: filter },
       {
         $lookup: {
-          from: 'ss_categories', // MongoDB collection name (usually lowercase plural)
+          from: 'ss_categories',
           localField: 'SS_ADMIN_VISIBLE.SS_CATEGORY',
           foreignField: '_id',
           as: 'categoryData'
@@ -123,8 +128,8 @@ export async function GET(request) {
       },
       {
         $addFields: {
-          'SS_ADMIN_VISIBLE.SS_CATEGORY': {
-            $arrayElemAt: ['$categoryData', 0]
+          categoryName: {
+            $arrayElemAt: ['$categoryData.SS_CATEGORY_NAME', 0]
           }
         }
       },
@@ -163,9 +168,8 @@ export async function GET(request) {
         images.push(...product.SS_CUSTOMER_VISIBLE.SS_GALLERY_IMAGES.filter((img) => img && img !== mainImage));
       }
 
-      // Handle category data from aggregation
-      const categoryData = product.SS_ADMIN_VISIBLE?.SS_CATEGORY;
-      const categoryName = categoryData?.SS_CATEGORY_NAME || 'Uncategorized';
+      // Use category name from aggregation or fallback
+      const categoryName = product.categoryName || 'Uncategorized';
 
       return {
         id: product._id.toString(),
@@ -214,7 +218,11 @@ export async function GET(request) {
   } catch (error) {
     console.error('Products API Error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch products' },
+      { 
+        success: false, 
+        error: 'Failed to fetch products',
+        details: error.message 
+      },
       { status: 500 }
     );
   }
@@ -222,9 +230,9 @@ export async function GET(request) {
 
 // Helper function to determine product badge
 function getProductBadge(product) {
-  if (product.SS_ADMIN_VISIBLE.SS_IS_FEATURED) return 'featured';
-  if (product.SS_ADMIN_VISIBLE.SS_TRENDING_SCORE > 50) return 'trending';
+  if (product.SS_ADMIN_VISIBLE?.SS_IS_FEATURED) return 'featured';
+  if (product.SS_ADMIN_VISIBLE?.SS_TRENDING_SCORE > 50) return 'trending';
   if (product.SS_CUSTOMER_VISIBLE?.SS_SOLD_COUNT > 100) return 'bestseller';
-  if (product.SS_ADMIN_VISIBLE.SS_DISCOUNT_PERCENTAGE > 20) return 'sale';
+  if (product.SS_ADMIN_VISIBLE?.SS_DISCOUNT_PERCENTAGE > 20) return 'sale';
   return null;
 }
